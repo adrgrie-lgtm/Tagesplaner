@@ -1,0 +1,343 @@
+package com.example.ui.screens
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.data.model.Conflict
+import com.example.data.model.CushionSuggestion
+import com.example.data.model.FamilyEvent
+import com.example.data.model.Person
+import com.example.data.model.PlanChangeProposal
+import com.example.data.model.ScheduleStressAnalysis
+import com.example.data.model.TimelineEntry
+import com.example.ui.components.BufferCard
+import com.example.ui.components.EventCard
+import com.example.ui.components.ProposalCard
+import com.example.ui.components.ScheduleAnalyzerCard
+import com.example.ui.theme.ConflictBorder
+import com.example.ui.theme.ConflictContainer
+import com.example.ui.theme.ConflictOrange
+import com.example.ui.theme.getMemberPalette
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TodayScreen(
+    currentDate: LocalDate,
+    timelineEntries: List<TimelineEntry>,
+    members: List<Person>,
+    selectedPersonFilter: String?,
+    conflicts: List<Conflict>,
+    activeProposal: PlanChangeProposal?,
+    scheduleAnalysis: ScheduleStressAnalysis?,
+    isAnalyzingSchedule: Boolean,
+    onSelectPersonFilter: (String?) -> Unit,
+    onChangePlanClick: () -> Unit,
+    onFamilyModeClick: () -> Unit,
+    onAiAssistantClick: () -> Unit,
+    onRunScheduleAnalysis: () -> Unit,
+    onApplyCushionSuggestion: (CushionSuggestion) -> Unit,
+    onEventClick: (FamilyEvent) -> Unit,
+    onResolveConflictClick: () -> Unit,
+    onApplyProposal: () -> Unit,
+    onDismissProposal: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val germanFormatter = DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.GERMAN)
+    val formattedDate = currentDate.format(germanFormatter)
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("today_screen")
+    ) {
+        // Header Section
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 2.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
+            ) {
+                // Top Row: Title & Quick Mode Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Heute",
+                            style = MaterialTheme.typography.headlineMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = formattedDate,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        // AI Assistant button
+                        OutlinedButton(
+                            onClick = onAiAssistantClick,
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.testTag("ai_assistant_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "KI-Assistent",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "KI", fontWeight = FontWeight.Bold)
+                        }
+
+                        // "Was müssen wir jetzt wissen?" button
+                        Button(
+                            onClick = onFamilyModeClick,
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            modifier = Modifier.testTag("family_mode_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Jetzt wichtig",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Primary Action Button: "Plan hat sich geändert"
+                Button(
+                    onClick = onChangePlanClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("change_plan_button"),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Plan hat sich geändert",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Person Filter Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = selectedPersonFilter == null,
+                        onClick = { onSelectPersonFilter(null) },
+                        label = { Text("Alle") },
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    members.forEach { person ->
+                        val isSelected = selectedPersonFilter == person.id
+                        val palette = getMemberPalette(person.id)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onSelectPersonFilter(person.id) },
+                            label = { Text("${person.emoji} ${person.name}") },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = palette.container,
+                                selectedLabelColor = palette.onContainer
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        // Timeline Content List
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Proposal Card at top if active
+            if (activeProposal != null) {
+                item {
+                    ProposalCard(
+                        proposal = activeProposal,
+                        onApply = onApplyProposal,
+                        onChange = onChangePlanClick,
+                        onDismiss = onDismissProposal
+                    )
+                }
+            }
+
+            // AI-Driven Schedule Analyzer: Gaps & Cushion Time Recommendation
+            item {
+                ScheduleAnalyzerCard(
+                    analysis = scheduleAnalysis,
+                    isAnalyzing = isAnalyzingSchedule,
+                    onRunAnalysis = onRunScheduleAnalysis,
+                    onApplyCushion = onApplyCushionSuggestion
+                )
+            }
+
+            // Conflict Alert at top of day if exists
+            if (conflicts.isNotEmpty()) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = ConflictContainer),
+                        border = BorderStroke(1.5.dp, ConflictBorder),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Warning,
+                                    contentDescription = "Konflikt",
+                                    tint = ConflictOrange
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "⚠️ ${conflicts.size} Zeitkonflikt(e) heute",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = ConflictOrange
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = conflicts.first().reason,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color(0xFF4E2619)
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = onResolveConflictClick,
+                                colors = ButtonDefaults.buttonColors(containerColor = ConflictOrange),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Lösungsvorschlag anwenden", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Timeline Items: Events and Buffers
+            if (timelineEntries.isEmpty()) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(40.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Keine Termine für diesen Tag geplant.\nGenießt die freie Zeit!",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                items(timelineEntries) { entry ->
+                    when (entry) {
+                        is TimelineEntry.EventEntry -> {
+                            val person = members.find { it.id == entry.event.personId }
+                                ?: Person(entry.event.personId, entry.event.personId, "", "", "👤")
+                            EventCard(
+                                event = entry.event,
+                                person = person,
+                                conflict = entry.conflict,
+                                onCardClick = { onEventClick(entry.event) },
+                                onResolveConflictClick = onResolveConflictClick
+                            )
+                        }
+                        is TimelineEntry.BufferEntry -> {
+                            BufferCard(buffer = entry)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

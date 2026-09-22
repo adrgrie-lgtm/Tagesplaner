@@ -1,0 +1,7 @@
+{
+  "name": "Familienplaner",
+  "description": "Persönlicher Familienplaner für den Alltag mit Kindern. Schützt feste Termine, erkennt flexible Zeiten, hält Puffer frei und schlägt bei Änderungen sinnvolle neue Planungen vor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
