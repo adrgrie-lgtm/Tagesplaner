@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Sync
@@ -80,6 +81,7 @@ fun TodayScreen(
     onRunScheduleAnalysis: () -> Unit,
     onApplyCushionSuggestion: (CushionSuggestion) -> Unit,
     onEventClick: (FamilyEvent) -> Unit,
+    onAddNewEvent: () -> Unit = {},
     onResolveConflictClick: () -> Unit,
     onApplyProposal: () -> Unit,
     onDismissProposal: () -> Unit,
@@ -170,29 +172,55 @@ fun TodayScreen(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Primary Action Button: "Plan hat sich geändert"
-                Button(
-                    onClick = onChangePlanClick,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .testTag("change_plan_button"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary
-                    )
+                // Action Buttons Row: "Plan hat sich geändert" & "+ Neuer Termin"
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Sync,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Plan hat sich geändert",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Button(
+                        onClick = onChangePlanClick,
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .height(50.dp)
+                            .testTag("change_plan_button"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sync,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Plan ändern",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = onAddNewEvent,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp)
+                            .testTag("today_add_event_button"),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "+ Termin",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(12.dp))

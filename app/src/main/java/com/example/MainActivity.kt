@@ -172,6 +172,7 @@ fun FamilienplanerApp(
                             onRunScheduleAnalysis = { viewModel.runScheduleAnalysisNow() },
                             onApplyCushionSuggestion = { viewModel.applyCushionSuggestion(it) },
                             onEventClick = { viewModel.openAddEventDialog(it) },
+                            onAddNewEvent = { viewModel.openAddEventDialog(null) },
                             onResolveConflictClick = { viewModel.resolveCaregiverConflict() },
                             onApplyProposal = { viewModel.applyProposal() },
                             onDismissProposal = { viewModel.dismissProposal() }
