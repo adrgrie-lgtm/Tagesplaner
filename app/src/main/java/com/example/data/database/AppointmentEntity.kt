@@ -19,9 +19,13 @@ data class AppointmentEntity(
     val startTime: LocalTime,
     val durationMinutes: Int,
     val planningType: PlanningType,
+    val entryType: ScheduleEntryType = ScheduleEntryType.EVENT,
     val caregiver: Caregiver = Caregiver.NONE,
     val notes: String = "",
     val isCompleted: Boolean = false,
+    val isTask: Boolean = false,
+    val recurrence: com.example.data.model.RecurrenceRule = com.example.data.model.RecurrenceRule.NONE,
+    val recurrenceGroupId: String? = null,
     val createdAt: Long = System.currentTimeMillis()
 ) {
     fun toFamilyEvent(): FamilyEvent = FamilyEvent(
@@ -31,22 +35,36 @@ data class AppointmentEntity(
         date = date,
         startTime = startTime,
         durationMinutes = durationMinutes,
-        planningType = planningType,
+        planningType = if (entryType == ScheduleEntryType.BUFFER) PlanningType.BUFFER else planningType,
         caregiver = caregiver,
         notes = notes,
-        isCompleted = isCompleted
+        isCompleted = isCompleted,
+        isTask = isTask || entryType == ScheduleEntryType.TASK,
+        recurrence = recurrence,
+        recurrenceGroupId = recurrenceGroupId
     )
 }
 
-fun FamilyEvent.toEntity(): AppointmentEntity = AppointmentEntity(
-    id = id,
-    title = title,
-    personId = personId,
-    date = date,
-    startTime = startTime,
-    durationMinutes = durationMinutes,
-    planningType = planningType,
-    caregiver = caregiver,
-    notes = notes,
-    isCompleted = isCompleted
-)
+fun FamilyEvent.toEntity(): AppointmentEntity {
+    val computedEntryType = when {
+        planningType == PlanningType.BUFFER -> ScheduleEntryType.BUFFER
+        isTask -> ScheduleEntryType.TASK
+        else -> ScheduleEntryType.EVENT
+    }
+    return AppointmentEntity(
+        id = id,
+        title = title,
+        personId = personId,
+        date = date,
+        startTime = startTime,
+        durationMinutes = durationMinutes,
+        planningType = planningType,
+        entryType = computedEntryType,
+        caregiver = caregiver,
+        notes = notes,
+        isCompleted = isCompleted,
+        isTask = isTask || computedEntryType == ScheduleEntryType.TASK,
+        recurrence = recurrence,
+        recurrenceGroupId = recurrenceGroupId
+    )
+}

@@ -40,6 +40,7 @@ import com.example.data.model.Caregiver
 import com.example.data.model.FamilyEvent
 import com.example.data.model.Person
 import com.example.data.model.PlanningType
+import com.example.data.model.RecurrenceRule
 import com.example.ui.theme.getMemberPalette
 import java.time.LocalDate
 import java.time.LocalTime
@@ -54,6 +55,7 @@ fun AddEditEventDialog(
     onSave: (FamilyEvent) -> Unit,
     onDelete: ((String) -> Unit)? = null
 ) {
+    var isTask by remember { mutableStateOf(eventToEdit?.isTask ?: false) }
     var title by remember { mutableStateOf(eventToEdit?.title ?: "") }
     var selectedPersonId by remember { mutableStateOf(eventToEdit?.personId ?: members.firstOrNull()?.id ?: "family") }
     var startHour by remember { mutableIntStateOf(eventToEdit?.startTime?.hour ?: 14) }
@@ -61,6 +63,7 @@ fun AddEditEventDialog(
     var durationMinutes by remember { mutableIntStateOf(eventToEdit?.durationMinutes ?: 45) }
     var planningType by remember { mutableStateOf(eventToEdit?.planningType ?: PlanningType.FIXED) }
     var caregiver by remember { mutableStateOf(eventToEdit?.caregiver ?: Caregiver.NONE) }
+    var recurrence by remember { mutableStateOf(eventToEdit?.recurrence ?: RecurrenceRule.NONE) }
     var notes by remember { mutableStateOf(eventToEdit?.notes ?: "") }
 
     var titleError by remember { mutableStateOf(false) }
@@ -74,7 +77,12 @@ fun AddEditEventDialog(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (eventToEdit == null) "Termin hinzufügen" else "Termin bearbeiten",
+                    text = when {
+                        eventToEdit != null && isTask -> "Aufgabe bearbeiten"
+                        eventToEdit != null -> "Termin bearbeiten"
+                        isTask -> "Aufgabe erstellen"
+                        else -> "Termin hinzufügen"
+                    },
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
@@ -103,6 +111,36 @@ fun AddEditEventDialog(
                     .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
+                // Eintragstyp wählen: Termin vs. Familienaufgabe
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = !isTask,
+                        onClick = { isTask = false },
+                        label = { Text("📅 Termin") },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("chip_type_appointment"),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    FilterChip(
+                        selected = isTask,
+                        onClick = {
+                            isTask = true
+                            if (planningType == PlanningType.FIXED) {
+                                planningType = PlanningType.FLEXIBLE
+                            }
+                        },
+                        label = { Text("✅ Familienaufgabe") },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("chip_type_task"),
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+
                 // Was? (Title)
                 OutlinedTextField(
                     value = title,
@@ -244,6 +282,52 @@ fun AddEditEventDialog(
                     }
                 }
 
+                // Wiederholung / Serie
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Wiederholung",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (recurrence != RecurrenceRule.NONE) {
+                            Text(
+                                text = recurrence.shortLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        RecurrenceRule.values().forEach { rule ->
+                            FilterChip(
+                                selected = recurrence == rule,
+                                onClick = { recurrence = rule },
+                                label = { Text(rule.shortLabel) },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.testTag("recurrence_chip_${rule.name.lowercase()}")
+                            )
+                        }
+                    }
+                    Text(
+                        text = recurrence.description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
                 // Optional: Notiz
                 OutlinedTextField(
                     value = notes,
@@ -270,7 +354,11 @@ fun AddEditEventDialog(
                         durationMinutes = durationMinutes,
                         planningType = planningType,
                         caregiver = caregiver,
-                        notes = notes.trim()
+                        notes = notes.trim(),
+                        isCompleted = eventToEdit?.isCompleted ?: false,
+                        isTask = isTask,
+                        recurrence = recurrence,
+                        recurrenceGroupId = eventToEdit?.recurrenceGroupId
                     )
                     onSave(event)
                 },

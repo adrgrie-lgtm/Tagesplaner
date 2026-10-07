@@ -424,8 +424,42 @@ fun UpcomingEventItem(
                 }
             }
 
-            // Planning Type Indicator Chip
-            PlanningTypeTag(planningType = event.planningType)
+            // Planning Type & Recurrence Indicator Chip
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (event.recurrence != com.example.data.model.RecurrenceRule.NONE) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Text(
+                            text = event.recurrence.shortLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                if (event.isTask) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (event.isCompleted) Color(0xFFE0E0E0) else Color(0xFFE8F5E9)
+                    ) {
+                        Text(
+                            text = if (event.isCompleted) "✓ Erledigt" else "Aufgabe",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (event.isCompleted) Color.DarkGray else Color(0xFF2E7D32),
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                } else {
+                    PlanningTypeTag(planningType = event.planningType)
+                }
+            }
         }
     }
 }

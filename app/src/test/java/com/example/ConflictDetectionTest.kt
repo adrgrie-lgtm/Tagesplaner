@@ -90,11 +90,12 @@ class ConflictDetectionTest {
 
     @Test
     fun testBufferGenerationInTimeline() {
+        val customDate = LocalDate.of(2027, 1, 1)
         val event1 = FamilyEvent(
             id = "ev_early",
             title = "Morgenkreis",
             personId = "louis",
-            date = testDate,
+            date = customDate,
             startTime = LocalTime.of(9, 0),
             durationMinutes = 30, // ends at 09:30
             planningType = PlanningType.FIXED
@@ -104,7 +105,7 @@ class ConflictDetectionTest {
             id = "ev_late",
             title = "Mittagessen",
             personId = "family",
-            date = testDate,
+            date = customDate,
             startTime = LocalTime.of(11, 0), // 90 min gap
             durationMinutes = 60,
             planningType = PlanningType.TARGET_TIME
@@ -114,7 +115,7 @@ class ConflictDetectionTest {
         repository.addEvent(event1)
         repository.addEvent(event2)
 
-        val timeline = repository.getTimelineForDate(testDate)
+        val timeline = repository.getTimelineForDate(customDate)
         val bufferEntries = timeline.filterIsInstance<TimelineEntry.BufferEntry>()
         assertTrue("Timeline should contain buffer entries for gaps >= 15 min", bufferEntries.isNotEmpty())
         val buffer = bufferEntries.find { it.startTime == LocalTime.of(9, 30) && it.endTime == LocalTime.of(11, 0) }
@@ -124,8 +125,9 @@ class ConflictDetectionTest {
 
     @Test
     fun testPlanChangeDelayProposal() {
+        val today = LocalDate.now()
         val proposal = repository.calculatePlanChange(
-            date = testDate,
+            date = today,
             reasonType = "louis_longer",
             additionalMinutes = 30
         )
@@ -137,9 +139,10 @@ class ConflictDetectionTest {
 
     @Test
     fun testPlanChangeCancellationProposal() {
-        val targetEvent = repository.events.value.first { it.date == testDate }
+        val today = LocalDate.now()
+        val targetEvent = repository.events.value.first { it.date == today }
         val proposal = repository.calculatePlanChange(
-            date = testDate,
+            date = today,
             reasonType = "cancel_event",
             targetEventId = targetEvent.id
         )
@@ -153,14 +156,15 @@ class ConflictDetectionTest {
 
     @Test
     fun testPlanChangeCaregiverUnavailability() {
+        val today = LocalDate.now()
         val proposal = repository.calculatePlanChange(
-            date = testDate,
+            date = today,
             reasonType = "parent_unavailable_papa"
         )
 
         assertNotNull(proposal)
         assertTrue(proposal.headline.contains("nicht verfügbar") || proposal.headline.contains("Papa"))
-        val dayEvents = proposal.proposedEvents.filter { it.date == testDate }
+        val dayEvents = proposal.proposedEvents.filter { it.date == today }
         assertTrue("All events for the date should not be assigned to Papa", dayEvents.all { it.caregiver != Caregiver.PAPA })
     }
 }

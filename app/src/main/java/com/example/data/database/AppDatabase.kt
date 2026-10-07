@@ -7,14 +7,20 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 
 @Database(
-    entities = [AppointmentEntity::class],
-    version = 1,
+    entities = [
+        AppointmentEntity::class,
+        ScheduleEntryEntity::class,
+        TaskEntity::class
+    ],
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun appointmentDao(): AppointmentDao
+    abstract fun scheduleEntryDao(): ScheduleEntryDao
+    abstract fun taskDao(): TaskDao
 
     companion object {
         @Volatile

@@ -43,4 +43,40 @@ class Converters {
             Caregiver.NONE
         }
     }
+
+    @TypeConverter
+    fun fromRecurrenceRule(value: com.example.data.model.RecurrenceRule?): String? = value?.name
+
+    @TypeConverter
+    fun toRecurrenceRule(value: String?): com.example.data.model.RecurrenceRule? = value?.let {
+        try {
+            com.example.data.model.RecurrenceRule.valueOf(it)
+        } catch (e: Exception) {
+            com.example.data.model.RecurrenceRule.NONE
+        }
+    }
+
+    @TypeConverter
+    fun fromScheduleEntryType(value: ScheduleEntryType?): String? = value?.name
+
+    @TypeConverter
+    fun toScheduleEntryType(value: String?): ScheduleEntryType? = value?.let {
+        try {
+            ScheduleEntryType.valueOf(it)
+        } catch (e: Exception) {
+            ScheduleEntryType.EVENT
+        }
+    }
+
+    @TypeConverter
+    fun fromPriorityLevel(value: PriorityLevel?): String? = value?.name
+
+    @TypeConverter
+    fun toPriorityLevel(value: String?): PriorityLevel? = value?.let {
+        try {
+            PriorityLevel.valueOf(it)
+        } catch (e: Exception) {
+            PriorityLevel.MEDIUM
+        }
+    }
 }

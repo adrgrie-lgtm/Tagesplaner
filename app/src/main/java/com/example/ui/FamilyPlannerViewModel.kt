@@ -13,6 +13,7 @@ import com.example.data.model.PlanChangeProposal
 import com.example.data.model.ScheduleStressAnalysis
 import com.example.data.model.TimelineEntry
 import com.example.data.repository.FamilyPlannerRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -21,11 +22,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import javax.inject.Inject
 
 enum class NavigationTab(val title: String, val iconName: String) {
     TODAY("Heute", "today"),
+    SCHEDULE("Übersicht", "format_list_bulleted"),
     WEEK("Woche", "calendar_view_week"),
-    ADD("+ Termin", "add_circle"),
+    ADD("+ Neu", "add_circle"),
     FAMILY("Familie", "group"),
     MORE("Mehr", "more_horiz")
 }
@@ -46,12 +49,9 @@ data class UiState(
     val scheduleAnalysis: ScheduleStressAnalysis? = null
 )
 
-class FamilyPlannerViewModel(
-    private val repository: FamilyPlannerRepository = try {
-        FamilyPlannerApplication.instance.repository
-    } catch (e: Exception) {
-        FamilyPlannerRepository()
-    },
+@HiltViewModel
+class FamilyPlannerViewModel @Inject constructor(
+    private val repository: FamilyPlannerRepository,
     private val aiService: GeminiAssistantService = GeminiAssistantService(),
     private val scheduleAnalyzer: ScheduleStressAnalyzer = ScheduleStressAnalyzer()
 ) : ViewModel() {
@@ -143,12 +143,23 @@ class FamilyPlannerViewModel(
     fun saveEvent(event: FamilyEvent) {
         if (_uiState.value.editingEvent != null) {
             repository.updateEvent(event)
-            showSnackbar("Termin '${event.title}' aktualisiert")
+            showSnackbar("Eintrag '${event.title}' aktualisiert")
         } else {
             repository.addEvent(event)
-            showSnackbar("Termin '${event.title}' hinzugefügt")
+            val recurrenceMsg = if (event.recurrence != com.example.data.model.RecurrenceRule.NONE) {
+                " (${event.recurrence.shortLabel} wiederholt)"
+            } else ""
+            val typeMsg = if (event.isTask) "Aufgabe" else "Termin"
+            showSnackbar("$typeMsg '${event.title}' hinzugefügt$recurrenceMsg")
         }
         closeAddEventDialog()
+    }
+
+    fun toggleEventCompleted(eventId: String) {
+        repository.toggleEventCompleted(eventId)
+        val event = events.value.find { it.id == eventId }
+        val status = if (event?.isCompleted == true) "als erledigt markiert" else "wieder geöffnet"
+        showSnackbar("'${event?.title ?: "Eintrag"}' $status")
     }
 
     fun deleteEvent(eventId: String) {

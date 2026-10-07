@@ -33,6 +33,19 @@ data class Person(
     val emoji: String
 )
 
+enum class RecurrenceRule(
+    val label: String,
+    val shortLabel: String,
+    val description: String
+) {
+    NONE("Keine Wiederholung", "Einmalig", "Findet nur am gewählten Tag statt"),
+    DAILY("Täglich", "Täglich", "Jeden Tag zur selben Zeit"),
+    WEEKLY("Wöchentlich", "Wöchentlich", "Einmal pro Woche an diesem Wochentag"),
+    BIWEEKLY("Alle 2 Wochen", "Alle 2 Wo.", "Alle zwei Wochen"),
+    MONTHLY("Monatlich", "Monatlich", "Einmal im Monat am selben Datum"),
+    WORKDAYS("Montag bis Freitag", "Mo-Fr", "An jedem Schultag / Werktag")
+}
+
 data class FamilyEvent(
     val id: String,
     val title: String,
@@ -43,7 +56,10 @@ data class FamilyEvent(
     val planningType: PlanningType,
     val caregiver: Caregiver = Caregiver.NONE,
     val notes: String = "",
-    val isCompleted: Boolean = false
+    val isCompleted: Boolean = false,
+    val isTask: Boolean = false,
+    val recurrence: RecurrenceRule = RecurrenceRule.NONE,
+    val recurrenceGroupId: String? = null
 ) {
     val endTime: LocalTime
         get() = startTime.plusMinutes(durationMinutes.toLong())

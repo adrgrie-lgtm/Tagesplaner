@@ -44,6 +44,7 @@ import com.example.ui.theme.ConflictBorder
 import com.example.ui.theme.ConflictContainer
 import com.example.ui.theme.ConflictOrange
 import com.example.ui.theme.getMemberPalette
+import androidx.activity.compose.BackHandler
 import java.time.LocalTime
 
 @Composable
@@ -54,6 +55,8 @@ fun FamilyModeScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    BackHandler(onBack = onBack)
+
     // Categorize today's state
     val sorted = todayEvents.sortedBy { it.startTime }
     val now = LocalTime.now()

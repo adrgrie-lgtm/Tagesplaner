@@ -1,7 +1,9 @@
 package com.example.data.repository
 
 import com.example.data.database.AppointmentDao
+import com.example.data.database.ScheduleEntryDao
 import com.example.data.database.toEntity
+import com.example.data.database.toScheduleEntity
 import com.example.data.model.AdjustmentType
 import com.example.data.model.Caregiver
 import com.example.data.model.Conflict
@@ -25,6 +27,8 @@ import java.util.UUID
 
 class FamilyPlannerRepository(
     private val appointmentDao: AppointmentDao? = null,
+    private val scheduleEntryDao: ScheduleEntryDao? = null,
+    private val taskDao: com.example.data.database.TaskDao? = null,
     private val coroutineScope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 ) {
 
@@ -42,7 +46,9 @@ class FamilyPlannerRepository(
             coroutineScope.launch {
                 val count = appointmentDao.getAppointmentsCount()
                 if (count == 0) {
-                    appointmentDao.insertAppointments(defaultEvents().map { it.toEntity() })
+                    val defaultData = defaultEvents()
+                    appointmentDao.insertAppointments(defaultData.map { it.toEntity() })
+                    scheduleEntryDao?.insertEntries(defaultData.map { it.toScheduleEntity() })
                 }
                 appointmentDao.getAllAppointments().collect { entities ->
                     if (entities.isNotEmpty()) {
@@ -321,30 +327,120 @@ class FamilyPlannerRepository(
     }
 
     fun addEvent(event: FamilyEvent) {
-        _events.value = _events.value + event
-        if (appointmentDao != null) {
+        val eventsToInsert = if (event.recurrence != com.example.data.model.RecurrenceRule.NONE) {
+            generateRecurringEvents(event)
+        } else {
+            listOf(event)
+        }
+        _events.value = _events.value + eventsToInsert
+        coroutineScope.launch {
+            appointmentDao?.insertAppointments(eventsToInsert.map { it.toEntity() })
+            scheduleEntryDao?.insertEntries(eventsToInsert.map { it.toScheduleEntity() })
+        }
+    }
+
+    private fun generateRecurringEvents(baseEvent: FamilyEvent): List<FamilyEvent> {
+        val groupId = baseEvent.recurrenceGroupId ?: UUID.randomUUID().toString()
+        val baseWithGroup = baseEvent.copy(recurrenceGroupId = groupId)
+        val result = mutableListOf(baseWithGroup)
+
+        val repetitions = when (baseEvent.recurrence) {
+            com.example.data.model.RecurrenceRule.DAILY -> 14 // 2 weeks of daily occurrences
+            com.example.data.model.RecurrenceRule.WORKDAYS -> 10 // 2 weeks of weekdays
+            com.example.data.model.RecurrenceRule.WEEKLY -> 8 // 8 weeks
+            com.example.data.model.RecurrenceRule.BIWEEKLY -> 6 // 12 weeks
+            com.example.data.model.RecurrenceRule.MONTHLY -> 4 // 4 months
+            com.example.data.model.RecurrenceRule.NONE -> 0
+        }
+
+        var currentDate = baseEvent.date
+        var created = 0
+        var dayOffset = 1
+
+        while (created < repetitions && dayOffset < 90) {
+            val nextDate = when (baseEvent.recurrence) {
+                com.example.data.model.RecurrenceRule.DAILY -> baseEvent.date.plusDays(dayOffset.toLong())
+                com.example.data.model.RecurrenceRule.WORKDAYS -> {
+                    val candidate = baseEvent.date.plusDays(dayOffset.toLong())
+                    if (candidate.dayOfWeek.value in 1..5) candidate else null
+                }
+                com.example.data.model.RecurrenceRule.WEEKLY -> baseEvent.date.plusWeeks(dayOffset.toLong())
+                com.example.data.model.RecurrenceRule.BIWEEKLY -> baseEvent.date.plusWeeks((dayOffset * 2).toLong())
+                com.example.data.model.RecurrenceRule.MONTHLY -> baseEvent.date.plusMonths(dayOffset.toLong())
+                com.example.data.model.RecurrenceRule.NONE -> null
+            }
+
+            if (nextDate != null) {
+                result.add(
+                    baseWithGroup.copy(
+                        id = UUID.randomUUID().toString(),
+                        date = nextDate
+                    )
+                )
+                created++
+            }
+            dayOffset++
+        }
+        return result
+    }
+
+    fun toggleEventCompleted(eventId: String) {
+        _events.value = _events.value.map {
+            if (it.id == eventId) it.copy(isCompleted = !it.isCompleted) else it
+        }
+        val target = _events.value.find { it.id == eventId }
+        if (target != null) {
             coroutineScope.launch {
-                appointmentDao.insertAppointment(event.toEntity())
+                appointmentDao?.setCompleted(eventId, target.isCompleted)
+                scheduleEntryDao?.setTaskCompleted(eventId, target.isCompleted)
             }
         }
     }
 
     fun updateEvent(event: FamilyEvent) {
         _events.value = _events.value.map { if (it.id == event.id) event else it }
-        if (appointmentDao != null) {
-            coroutineScope.launch {
-                appointmentDao.updateAppointment(event.toEntity())
-            }
+        coroutineScope.launch {
+            appointmentDao?.updateAppointment(event.toEntity())
+            scheduleEntryDao?.updateEntry(event.toScheduleEntity())
         }
     }
 
     fun deleteEvent(eventId: String) {
         _events.value = _events.value.filter { it.id != eventId }
-        if (appointmentDao != null) {
-            coroutineScope.launch {
-                appointmentDao.deleteAppointmentById(eventId)
-            }
+        coroutineScope.launch {
+            appointmentDao?.deleteAppointmentById(eventId)
+            scheduleEntryDao?.deleteEntryById(eventId)
         }
+    }
+
+    // --- Room Task DAO Operations for Family Schedules ---
+    val allTasks: kotlinx.coroutines.flow.Flow<List<com.example.data.database.TaskEntity>> =
+        taskDao?.getAllTasks() ?: kotlinx.coroutines.flow.emptyFlow()
+
+    fun getTasksForDate(date: LocalDate): kotlinx.coroutines.flow.Flow<List<com.example.data.database.TaskEntity>> =
+        taskDao?.getTasksForDate(date) ?: kotlinx.coroutines.flow.emptyFlow()
+
+    fun getTasksByPriority(priority: com.example.data.database.PriorityLevel): kotlinx.coroutines.flow.Flow<List<com.example.data.database.TaskEntity>> =
+        taskDao?.getTasksByPriority(priority) ?: kotlinx.coroutines.flow.emptyFlow()
+
+    suspend fun insertTask(task: com.example.data.database.TaskEntity) {
+        taskDao?.insertTask(task)
+    }
+
+    suspend fun updateTask(task: com.example.data.database.TaskEntity) {
+        taskDao?.updateTask(task)
+    }
+
+    suspend fun toggleTaskCompleted(taskId: String, isCompleted: Boolean) {
+        taskDao?.setTaskCompleted(taskId, isCompleted)
+    }
+
+    suspend fun deleteTask(task: com.example.data.database.TaskEntity) {
+        taskDao?.deleteTask(task)
+    }
+
+    suspend fun deleteTaskById(taskId: String) {
+        taskDao?.deleteTaskById(taskId)
     }
 
     fun getPersonById(personId: String): Person {
@@ -716,11 +812,10 @@ class FamilyPlannerRepository(
         val proposal = _activeProposal.value ?: return
         _events.value = proposal.proposedEvents
         _activeProposal.value = null
-        if (appointmentDao != null) {
-            coroutineScope.launch {
-                appointmentDao.deleteAllAppointments()
-                appointmentDao.insertAppointments(proposal.proposedEvents.map { it.toEntity() })
-            }
+        coroutineScope.launch {
+            appointmentDao?.deleteAllAppointments()
+            appointmentDao?.insertAppointments(proposal.proposedEvents.map { it.toEntity() })
+            scheduleEntryDao?.insertEntries(proposal.proposedEvents.map { it.toScheduleEntity() })
         }
     }
 
@@ -733,11 +828,10 @@ class FamilyPlannerRepository(
         _members.value = defaultMembers()
         _events.value = defaultList
         _activeProposal.value = null
-        if (appointmentDao != null) {
-            coroutineScope.launch {
-                appointmentDao.deleteAllAppointments()
-                appointmentDao.insertAppointments(defaultList.map { it.toEntity() })
-            }
+        coroutineScope.launch {
+            appointmentDao?.deleteAllAppointments()
+            appointmentDao?.insertAppointments(defaultList.map { it.toEntity() })
+            scheduleEntryDao?.insertEntries(defaultList.map { it.toScheduleEntity() })
         }
     }
 }

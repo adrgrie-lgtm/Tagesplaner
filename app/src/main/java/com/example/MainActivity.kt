@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -41,28 +42,39 @@ import com.example.ui.screens.ChangePlanBottomSheet
 import com.example.ui.screens.FamilyModeScreen
 import com.example.ui.screens.FamilyScreen
 import com.example.ui.screens.MoreScreen
+import com.example.ui.screens.ScheduleListScreen
 import com.example.ui.screens.TodayScreen
 import com.example.ui.screens.WeekScreen
 import com.example.ui.theme.MyApplicationTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val viewModel: FamilyPlannerViewModel by viewModels()
+    private val taskViewModel: com.example.ui.TaskViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                FamilienplanerApp(viewModel = viewModel)
+                FamilienplanerApp(
+                    viewModel = viewModel,
+                    taskViewModel = taskViewModel
+                )
             }
         }
     }
 }
 
 @Composable
-fun FamilienplanerApp(viewModel: FamilyPlannerViewModel) {
+fun FamilienplanerApp(
+    viewModel: FamilyPlannerViewModel,
+    taskViewModel: com.example.ui.TaskViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val taskUiState by taskViewModel.uiState.collectAsStateWithLifecycle()
     val members by viewModel.members.collectAsStateWithLifecycle()
     val events by viewModel.events.collectAsStateWithLifecycle()
     val timelineEntries by viewModel.timelineEntries.collectAsStateWithLifecycle()
@@ -99,8 +111,9 @@ fun FamilienplanerApp(viewModel: FamilyPlannerViewModel) {
                 ) {
                     val tabs = listOf(
                         Triple(NavigationTab.TODAY, Icons.Default.Today, "Heute"),
+                        Triple(NavigationTab.SCHEDULE, Icons.AutoMirrored.Filled.FormatListBulleted, "Übersicht"),
                         Triple(NavigationTab.WEEK, Icons.Default.DateRange, "Woche"),
-                        Triple(NavigationTab.ADD, Icons.Default.AddCircle, "+ Termin"),
+                        Triple(NavigationTab.ADD, Icons.Default.AddCircle, "+ Neu"),
                         Triple(NavigationTab.FAMILY, Icons.Default.People, "Familie"),
                         Triple(NavigationTab.MORE, Icons.Default.MoreHoriz, "Mehr")
                     )
@@ -162,6 +175,30 @@ fun FamilienplanerApp(viewModel: FamilyPlannerViewModel) {
                             onResolveConflictClick = { viewModel.resolveCaregiverConflict() },
                             onApplyProposal = { viewModel.applyProposal() },
                             onDismissProposal = { viewModel.dismissProposal() }
+                        )
+                    }
+
+                    NavigationTab.SCHEDULE -> {
+                        ScheduleListScreen(
+                            events = events,
+                            members = members,
+                            selectedPersonFilter = uiState.selectedPersonFilter,
+                            onSelectPersonFilter = { viewModel.setPersonFilter(it) },
+                            onAddNewEntry = { viewModel.openAddEventDialog(null) },
+                            onEventClick = { viewModel.openAddEventDialog(it) },
+                            onToggleCompleted = { viewModel.toggleEventCompleted(it) },
+                            isOptimizingSchedule = taskUiState.isOptimizingSchedule,
+                            optimizationResult = taskUiState.optimizationResult,
+                            onOptimizeScheduleClick = {
+                                taskViewModel.optimizeDailySchedule(uiState.selectedDate)
+                            },
+                            onApplyOptimization = { optResult ->
+                                taskViewModel.applyOptimizedSchedule(optResult)
+                                viewModel.showSnackbar("Optimierte Zeiten übernommen!")
+                            },
+                            onDismissOptimization = {
+                                taskViewModel.dismissOptimization()
+                            }
                         )
                     }
 

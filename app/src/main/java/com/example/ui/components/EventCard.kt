@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.EventRepeat
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -35,6 +36,7 @@ import com.example.data.model.Conflict
 import com.example.data.model.FamilyEvent
 import com.example.data.model.Person
 import com.example.data.model.PlanningType
+import com.example.data.model.RecurrenceRule
 import com.example.ui.theme.ConflictBorder
 import com.example.ui.theme.ConflictContainer
 import com.example.ui.theme.ConflictOrange
@@ -94,8 +96,40 @@ fun EventCard(
                     )
                 }
 
-                // Planning Type Tag
-                PlanningTypeTag(planningType = event.planningType)
+                // Badges
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (event.recurrence != RecurrenceRule.NONE) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.EventRepeat,
+                                    contentDescription = "Serie",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = event.recurrence.shortLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+
+                    // Planning Type Tag
+                    PlanningTypeTag(planningType = event.planningType)
+                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))
