@@ -27,7 +27,9 @@ enum class PriorityLevel(val title: String, val weight: Int) {
         Index(value = ["date"]),
         Index(value = ["priorityLevel"]),
         Index(value = ["isCompleted"]),
-        Index(value = ["personId"])
+        Index(value = ["personId"]),
+        Index(value = ["familyId"]),
+        Index(value = ["isDeleted"])
     ]
 )
 data class TaskEntity(
@@ -41,5 +43,9 @@ data class TaskEntity(
     val personId: String? = null,
     val notes: String = "",
     val isCompleted: Boolean = false,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val familyId: String = "local_family",
+    val updatedAt: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false,
+    val syncStatus: SyncStatus = SyncStatus.PENDING
 )

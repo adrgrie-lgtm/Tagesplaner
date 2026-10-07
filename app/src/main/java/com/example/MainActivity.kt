@@ -40,6 +40,7 @@ import com.example.ui.screens.AddEditEventDialog
 import com.example.ui.screens.AiAssistantDialog
 import com.example.ui.screens.ChangePlanBottomSheet
 import com.example.ui.screens.FamilyModeScreen
+import com.example.ui.screens.FamilyOnboardingScreen
 import com.example.ui.screens.FamilyScreen
 import com.example.ui.screens.MoreScreen
 import com.example.ui.screens.ScheduleListScreen
@@ -80,6 +81,7 @@ fun FamilienplanerApp(
     val timelineEntries by viewModel.timelineEntries.collectAsStateWithLifecycle()
     val conflicts by viewModel.todayConflicts.collectAsStateWithLifecycle()
     val activeProposal by viewModel.activeProposal.collectAsStateWithLifecycle()
+    val syncStatus by viewModel.syncState.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -91,7 +93,21 @@ fun FamilienplanerApp(
         }
     }
 
-    if (uiState.showFamilyMode) {
+    if (uiState.showOnboarding) {
+        FamilyOnboardingScreen(
+            onCreateFamily = { familyName, myName, role, emoji ->
+                viewModel.createFamily(familyName, myName, role, emoji)
+            },
+            onJoinFamily = { inviteCode, myName, role, emoji ->
+                viewModel.joinFamily(inviteCode, myName, role, emoji)
+            },
+            onContinueOffline = {
+                viewModel.continueOffline()
+            },
+            isLoading = uiState.isOnboardingLoading,
+            errorMessage = uiState.onboardingErrorMessage
+        )
+    } else if (uiState.showFamilyMode) {
         FamilyModeScreen(
             todayEvents = events.filter { it.date == uiState.selectedDate },
             members = members,
@@ -233,8 +249,13 @@ fun FamilienplanerApp(
                     NavigationTab.MORE -> {
                         MoreScreen(
                             members = members,
+                            familyName = uiState.familyName,
+                            inviteCode = uiState.inviteCode,
+                            syncStatus = syncStatus,
                             onUpdateMemberName = { id, name -> viewModel.updateMemberName(id, name) },
-                            onResetDemoData = { viewModel.resetDemoData() }
+                            onAddMember = { name, role, emoji -> viewModel.addMember(name, role, emoji) },
+                            onOpenFamilySync = { viewModel.openOnboarding() },
+                            onResetDemoData = { viewModel.continueOffline() }
                         )
                     }
 
@@ -254,7 +275,10 @@ fun FamilienplanerApp(
             members = members,
             onDismiss = { viewModel.closeAddEventDialog() },
             onSave = { viewModel.saveEvent(it) },
-            onDelete = { viewModel.deleteEvent(it) }
+            onDelete = { id ->
+                viewModel.deleteEvent(id)
+                viewModel.closeAddEventDialog()
+            }
         )
     }
 
@@ -264,25 +288,19 @@ fun FamilienplanerApp(
             members = members,
             todayEvents = events.filter { it.date == uiState.selectedDate },
             onDismiss = { viewModel.closeChangePlanSheet() },
-            onApplyChange = { reason, mins, targetId ->
-                viewModel.triggerPlanChange(reason, mins, targetId)
+            onApplyChange = { reasonType, minutes, targetEventId ->
+                viewModel.triggerPlanChange(reasonType, minutes, targetEventId)
             }
         )
     }
 
-    // Dialog: KI-Assistent
+    // Dialog: Gemini KI-Planungsassistent
     if (uiState.showAiDialog) {
         AiAssistantDialog(
             isLoading = uiState.isAiLoading,
             errorMessage = uiState.aiErrorMessage,
             onDismiss = { viewModel.closeAiDialog() },
-            onSubmitPrompt = { prompt -> viewModel.queryAiAssistant(prompt) }
+            onSubmitPrompt = { viewModel.queryAiAssistant(it) }
         )
     }
-}
-
-// Kept for backward compatibility with greeting screenshot test
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(text = "Hello $name!", modifier = modifier)
 }

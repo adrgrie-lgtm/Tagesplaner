@@ -10,9 +10,10 @@ import androidx.room.TypeConverters
     entities = [
         AppointmentEntity::class,
         ScheduleEntryEntity::class,
-        TaskEntity::class
+        TaskEntity::class,
+        MemberEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -21,6 +22,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun appointmentDao(): AppointmentDao
     abstract fun scheduleEntryDao(): ScheduleEntryDao
     abstract fun taskDao(): TaskDao
+    abstract fun memberDao(): MemberDao
 
     companion object {
         @Volatile
@@ -33,7 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "family_planner_database"
                 )
-                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .addMigrations(MIGRATION_3_4)
                     .build()
                 INSTANCE = instance
                 instance

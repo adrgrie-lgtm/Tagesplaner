@@ -26,7 +26,11 @@ data class AppointmentEntity(
     val isTask: Boolean = false,
     val recurrence: com.example.data.model.RecurrenceRule = com.example.data.model.RecurrenceRule.NONE,
     val recurrenceGroupId: String? = null,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val familyId: String = "local_family",
+    val updatedAt: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false,
+    val syncStatus: SyncStatus = SyncStatus.PENDING
 ) {
     fun toFamilyEvent(): FamilyEvent = FamilyEvent(
         id = id,
@@ -41,11 +45,14 @@ data class AppointmentEntity(
         isCompleted = isCompleted,
         isTask = isTask || entryType == ScheduleEntryType.TASK,
         recurrence = recurrence,
-        recurrenceGroupId = recurrenceGroupId
+        recurrenceGroupId = recurrenceGroupId,
+        familyId = familyId,
+        updatedAt = updatedAt,
+        isDeleted = isDeleted
     )
 }
 
-fun FamilyEvent.toEntity(): AppointmentEntity {
+fun FamilyEvent.toEntity(familyId: String = "local_family"): AppointmentEntity {
     val computedEntryType = when {
         planningType == PlanningType.BUFFER -> ScheduleEntryType.BUFFER
         isTask -> ScheduleEntryType.TASK
@@ -65,6 +72,10 @@ fun FamilyEvent.toEntity(): AppointmentEntity {
         isCompleted = isCompleted,
         isTask = isTask || computedEntryType == ScheduleEntryType.TASK,
         recurrence = recurrence,
-        recurrenceGroupId = recurrenceGroupId
+        recurrenceGroupId = recurrenceGroupId,
+        familyId = if (this.familyId.isNotEmpty() && this.familyId != "local_family") this.familyId else familyId,
+        updatedAt = if (this.updatedAt > 0) this.updatedAt else System.currentTimeMillis(),
+        isDeleted = isDeleted,
+        syncStatus = SyncStatus.PENDING
     )
 }

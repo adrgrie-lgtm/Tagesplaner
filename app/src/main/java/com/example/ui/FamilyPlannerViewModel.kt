@@ -2,7 +2,6 @@ package com.example.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.FamilyPlannerApplication
 import com.example.data.ai.GeminiAssistantService
 import com.example.data.ai.ScheduleStressAnalyzer
 import com.example.data.model.Conflict
@@ -13,6 +12,8 @@ import com.example.data.model.PlanChangeProposal
 import com.example.data.model.ScheduleStressAnalysis
 import com.example.data.model.TimelineEntry
 import com.example.data.repository.FamilyPlannerRepository
+import com.example.data.sync.FamilySessionManager
+import com.example.data.sync.FamilySyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -35,36 +36,54 @@ enum class NavigationTab(val title: String, val iconName: String) {
 
 data class UiState(
     val selectedDate: LocalDate = LocalDate.now(),
-    val selectedPersonFilter: String? = null, // null means "All"
+    val selectedPersonFilter: String? = null,
     val currentTab: NavigationTab = NavigationTab.TODAY,
     val showAddDialog: Boolean = false,
     val showChangePlanSheet: Boolean = false,
     val showAiDialog: Boolean = false,
     val showFamilyMode: Boolean = false,
+    val showOnboarding: Boolean = false,
+    val isOnboardingLoading: Boolean = false,
+    val onboardingErrorMessage: String? = null,
     val editingEvent: FamilyEvent? = null,
     val isAiLoading: Boolean = false,
     val aiErrorMessage: String? = null,
     val snackbarMessage: String? = null,
     val isAnalyzingSchedule: Boolean = false,
-    val scheduleAnalysis: ScheduleStressAnalysis? = null
+    val scheduleAnalysis: ScheduleStressAnalysis? = null,
+    val familyName: String = "Meine Familie",
+    val inviteCode: String = "",
+    val syncStatusText: String = "Lokal"
 )
 
 @HiltViewModel
 class FamilyPlannerViewModel @Inject constructor(
     private val repository: FamilyPlannerRepository,
+    private val sessionManager: FamilySessionManager,
+    private val syncManager: FamilySyncManager,
     private val aiService: GeminiAssistantService = GeminiAssistantService(),
     private val scheduleAnalyzer: ScheduleStressAnalyzer = ScheduleStressAnalyzer()
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(UiState())
+    private val _uiState = MutableStateFlow(
+        UiState(
+            showOnboarding = !sessionManager.isOnboarded(),
+            familyName = sessionManager.getFamilyName(),
+            inviteCode = sessionManager.getInviteCode()
+        )
+    )
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
     val members: StateFlow<List<Person>> = repository.members
     val events: StateFlow<List<FamilyEvent>> = repository.events
     val activeProposal: StateFlow<PlanChangeProposal?> = repository.activeProposal
+    val syncState: StateFlow<String> = syncManager.syncState
 
     init {
-        // Automatically analyze initial date schedule for gaps and cushion suggestions
+        // Start background sync if family session is already onboarded
+        if (sessionManager.isOnboarded() && sessionManager.getFamilyId() != "local_family") {
+            syncManager.startSync()
+        }
         analyzeScheduleForDate(_uiState.value.selectedDate)
     }
 
@@ -89,8 +108,67 @@ class FamilyPlannerViewModel @Inject constructor(
         _uiState,
         events
     ) { state, _ ->
-        repository.detectConflictsForDate(state.selectedDate)
+        val dayEvents = repository.events.value.filter { it.date == state.selectedDate && !it.isDeleted }
+        repository.detectConflicts(dayEvents)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // --- ONBOARDING & CLOUD SYNC ACTIONS ---
+    fun createFamily(familyName: String, myName: String, role: String, emoji: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isOnboardingLoading = true, onboardingErrorMessage = null)
+            val result = syncManager.createFamily(familyName, myName, role, emoji)
+            result.fold(
+                onSuccess = { inviteCode ->
+                    _uiState.value = _uiState.value.copy(
+                        isOnboardingLoading = false,
+                        showOnboarding = false,
+                        familyName = familyName,
+                        inviteCode = inviteCode
+                    )
+                    showSnackbar("Familie '$familyName' gegründet! Code: $inviteCode")
+                },
+                onFailure = { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isOnboardingLoading = false,
+                        onboardingErrorMessage = "Fehler: ${error.localizedMessage ?: "Verbindung fehlgeschlagen"}"
+                    )
+                }
+            )
+        }
+    }
+
+    fun joinFamily(inviteCode: String, myName: String, role: String, emoji: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isOnboardingLoading = true, onboardingErrorMessage = null)
+            val result = syncManager.joinFamily(inviteCode, myName, role, emoji)
+            result.fold(
+                onSuccess = { familyName ->
+                    _uiState.value = _uiState.value.copy(
+                        isOnboardingLoading = false,
+                        showOnboarding = false,
+                        familyName = familyName,
+                        inviteCode = inviteCode
+                    )
+                    showSnackbar("Erfolgreich Familie '$familyName' beigetreten!")
+                },
+                onFailure = { error ->
+                    _uiState.value = _uiState.value.copy(
+                        isOnboardingLoading = false,
+                        onboardingErrorMessage = error.localizedMessage ?: "Beitritt fehlgeschlagen"
+                    )
+                }
+            )
+        }
+    }
+
+    fun continueOffline() {
+        _uiState.value = _uiState.value.copy(showOnboarding = false)
+        showSnackbar("Offline-Modus aktiv. Du kannst später in 'Mehr' synchronisieren.")
+    }
+
+    fun openOnboarding() {
+        _uiState.value = _uiState.value.copy(showOnboarding = true, onboardingErrorMessage = null)
+    }
 
     fun selectDate(date: LocalDate) {
         _uiState.value = _uiState.value.copy(selectedDate = date)
@@ -172,29 +250,31 @@ class FamilyPlannerViewModel @Inject constructor(
         additionalMinutes: Int = 30,
         targetEventId: String? = null
     ) {
-        repository.calculatePlanChange(
-            date = _uiState.value.selectedDate,
-            reasonType = reasonType,
-            additionalMinutes = additionalMinutes,
-            targetEventId = targetEventId
-        )
+        repository.generatePlanChangeProposal(reasonType)
         closeChangePlanSheet()
     }
 
     fun resolveCaregiverConflict() {
-        repository.calculatePlanChange(
-            date = _uiState.value.selectedDate,
-            reasonType = "resolve_caregiver_conflict"
-        )
+        val conflicts = todayConflicts.value
+        if (conflicts.isNotEmpty()) {
+            val proposal = repository.createBufferSuggestionForConflict(conflicts.first())
+            if (proposal != null) {
+                repository.updateEvent(proposal)
+                showSnackbar("Konflikt aufgelöst: '${proposal.title}' nach hinten verschoben.")
+            }
+        }
     }
 
     fun applyProposal() {
-        repository.applyActiveProposal()
-        showSnackbar("Neuer Tagesplan erfolgreich übernommen!")
+        val proposal = activeProposal.value
+        if (proposal != null) {
+            repository.applyProposal(proposal)
+            showSnackbar("Neuer Tagesplan erfolgreich übernommen!")
+        }
     }
 
     fun dismissProposal() {
-        repository.dismissActiveProposal()
+        repository.dismissProposal()
     }
 
     fun queryAiAssistant(prompt: String) {
@@ -207,7 +287,9 @@ class FamilyPlannerViewModel @Inject constructor(
                     currentEvents = events.value,
                     members = members.value
                 )
-                repository.setActiveProposal(proposal)
+                if (proposal != null) {
+                    repository.generatePlanChangeProposal(proposal.reasonExplanation)
+                }
                 _uiState.value = _uiState.value.copy(isAiLoading = false, showAiDialog = false)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -243,8 +325,10 @@ class FamilyPlannerViewModel @Inject constructor(
             date = _uiState.value.selectedDate,
             currentEvents = events.value
         )
-        repository.setActiveProposal(proposal)
-        showSnackbar("Puffer-Vorschlag erstellt: Bitte kurz prüfen und bestätigen!")
+        if (proposal != null) {
+            repository.generatePlanChangeProposal("Puffer optimiert")
+            showSnackbar("Puffer-Vorschlag erstellt: Bitte kurz prüfen und bestätigen!")
+        }
     }
 
     fun runScheduleAnalysisNow() {
@@ -256,9 +340,14 @@ class FamilyPlannerViewModel @Inject constructor(
         showSnackbar("Name für $id gespeichert")
     }
 
-    fun resetDemoData() {
-        repository.resetToDemoData()
-        showSnackbar("Demo-Daten zurückgesetzt")
+    fun addMember(name: String, role: String, emoji: String) {
+        repository.addMember(name, role, emoji)
+        showSnackbar("Mitglied '$name' hinzugefügt")
+    }
+
+    fun removeMember(id: String) {
+        repository.removeMember(id)
+        showSnackbar("Mitglied entfernt")
     }
 
     fun showSnackbar(message: String) {

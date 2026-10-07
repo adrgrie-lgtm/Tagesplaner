@@ -29,7 +29,9 @@ enum class ScheduleEntryType {
         Index(value = ["date"]),
         Index(value = ["personId"]),
         Index(value = ["entryType"]),
-        Index(value = ["recurrenceGroupId"])
+        Index(value = ["recurrenceGroupId"]),
+        Index(value = ["familyId"]),
+        Index(value = ["isDeleted"])
     ]
 )
 data class ScheduleEntryEntity(
@@ -49,7 +51,11 @@ data class ScheduleEntryEntity(
     val recurrence: RecurrenceRule = RecurrenceRule.NONE,
     val recurrenceGroupId: String? = null,
     val priority: Int = 0,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val familyId: String = "local_family",
+    val updatedAt: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false,
+    val syncStatus: SyncStatus = SyncStatus.PENDING
 ) {
     fun toFamilyEvent(): FamilyEvent = FamilyEvent(
         id = id,
@@ -64,11 +70,14 @@ data class ScheduleEntryEntity(
         isCompleted = isCompleted,
         isTask = isTask || entryType == ScheduleEntryType.TASK,
         recurrence = recurrence,
-        recurrenceGroupId = recurrenceGroupId
+        recurrenceGroupId = recurrenceGroupId,
+        familyId = familyId,
+        updatedAt = updatedAt,
+        isDeleted = isDeleted
     )
 }
 
-fun FamilyEvent.toScheduleEntity(): ScheduleEntryEntity {
+fun FamilyEvent.toScheduleEntity(familyId: String = "local_family"): ScheduleEntryEntity {
     val entryType = when {
         planningType == PlanningType.BUFFER -> ScheduleEntryType.BUFFER
         isTask -> ScheduleEntryType.TASK
@@ -88,6 +97,10 @@ fun FamilyEvent.toScheduleEntity(): ScheduleEntryEntity {
         isCompleted = isCompleted,
         isTask = isTask || entryType == ScheduleEntryType.TASK,
         recurrence = recurrence,
-        recurrenceGroupId = recurrenceGroupId
+        recurrenceGroupId = recurrenceGroupId,
+        familyId = if (this.familyId.isNotEmpty() && this.familyId != "local_family") this.familyId else familyId,
+        updatedAt = if (this.updatedAt > 0) this.updatedAt else System.currentTimeMillis(),
+        isDeleted = isDeleted,
+        syncStatus = SyncStatus.PENDING
     )
 }

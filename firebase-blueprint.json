@@ -1,0 +1,100 @@
+{
+  "entities": {
+    "Family": {
+      "title": "Family",
+      "description": "Represents a private family group with invite code and creator info",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "inviteCode": { "type": "string" },
+        "createdDate": { "type": "string", "format": "date-time" },
+        "memberUids": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["id", "name", "inviteCode", "memberUids"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "A family member profile within a specific family",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "emoji": { "type": "string" },
+        "colorKey": { "type": "string" },
+        "firebaseUid": { "type": "string" },
+        "updatedAt": { "type": "number" },
+        "isDeleted": { "type": "boolean" }
+      },
+      "required": ["id", "familyId", "name", "role", "emoji", "updatedAt", "isDeleted"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "A family event or appointment synced across family devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "personId": { "type": "string" },
+        "date": { "type": "string" },
+        "startTime": { "type": "string" },
+        "durationMinutes": { "type": "number" },
+        "planningType": { "type": "string" },
+        "entryType": { "type": "string" },
+        "caregiver": { "type": "string" },
+        "notes": { "type": "string" },
+        "isCompleted": { "type": "boolean" },
+        "isTask": { "type": "boolean" },
+        "recurrence": { "type": "string" },
+        "recurrenceGroupId": { "type": "string" },
+        "updatedAt": { "type": "number" },
+        "isDeleted": { "type": "boolean" }
+      },
+      "required": ["id", "familyId", "title", "personId", "date", "startTime", "durationMinutes", "planningType", "updatedAt", "isDeleted"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A family task synced across family devices",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "familyId": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "priorityLevel": { "type": "string" },
+        "personId": { "type": "string" },
+        "notes": { "type": "string" },
+        "isCompleted": { "type": "boolean" },
+        "updatedAt": { "type": "number" },
+        "isDeleted": { "type": "boolean" }
+      },
+      "required": ["id", "familyId", "title", "date", "startTime", "endTime", "priorityLevel", "updatedAt", "isDeleted"]
+    }
+  },
+  "firestore": {
+    "/families/{familyId}": {
+      "schema": { "$ref": "#/entities/Family" },
+      "description": "Core family metadata, invite code, and authorized member UIDs"
+    },
+    "/families/{familyId}/members/{memberId}": {
+      "schema": { "$ref": "#/entities/Member" },
+      "description": "Family members (Papa, Mama, Kinder, etc.)"
+    },
+    "/families/{familyId}/events/{eventId}": {
+      "schema": { "$ref": "#/entities/Event" },
+      "description": "Family appointments and schedule events"
+    },
+    "/families/{familyId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "Family schedule tasks"
+    }
+  }
+}

@@ -59,7 +59,10 @@ data class FamilyEvent(
     val isCompleted: Boolean = false,
     val isTask: Boolean = false,
     val recurrence: RecurrenceRule = RecurrenceRule.NONE,
-    val recurrenceGroupId: String? = null
+    val recurrenceGroupId: String? = null,
+    val familyId: String = "local_family",
+    val updatedAt: Long = System.currentTimeMillis(),
+    val isDeleted: Boolean = false
 ) {
     val endTime: LocalTime
         get() = startTime.plusMinutes(durationMinutes.toLong())

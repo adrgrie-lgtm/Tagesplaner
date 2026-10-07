@@ -3,9 +3,13 @@ package com.example.di
 import android.content.Context
 import com.example.data.database.AppDatabase
 import com.example.data.database.AppointmentDao
+import com.example.data.database.MemberDao
 import com.example.data.database.ScheduleEntryDao
 import com.example.data.database.TaskDao
 import com.example.data.repository.FamilyPlannerRepository
+import com.example.data.sync.FirebaseAuthService
+import com.example.data.sync.FamilySessionManager
+import com.example.data.sync.FamilySyncManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -41,16 +45,63 @@ object DatabaseModule {
     }
 
     @Provides
+    fun provideMemberDao(appDatabase: AppDatabase): MemberDao {
+        return appDatabase.memberDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideFamilySessionManager(
+        @ApplicationContext context: Context
+    ): FamilySessionManager {
+        return FamilySessionManager(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideFirebaseAuthService(): FirebaseAuthService {
+        return FirebaseAuthService()
+    }
+
+    @Provides
+    @Singleton
+    fun provideFamilySyncManager(
+        @ApplicationContext context: Context,
+        appointmentDao: AppointmentDao,
+        scheduleEntryDao: ScheduleEntryDao,
+        taskDao: TaskDao,
+        memberDao: MemberDao,
+        sessionManager: FamilySessionManager,
+        authService: FirebaseAuthService
+    ): FamilySyncManager {
+        return FamilySyncManager(
+            context = context,
+            appointmentDao = appointmentDao,
+            scheduleEntryDao = scheduleEntryDao,
+            taskDao = taskDao,
+            memberDao = memberDao,
+            sessionManager = sessionManager,
+            authService = authService
+        )
+    }
+
+    @Provides
     @Singleton
     fun provideFamilyPlannerRepository(
         appointmentDao: AppointmentDao,
         scheduleEntryDao: ScheduleEntryDao,
-        taskDao: TaskDao
+        taskDao: TaskDao,
+        memberDao: MemberDao,
+        sessionManager: FamilySessionManager,
+        syncManager: FamilySyncManager
     ): FamilyPlannerRepository {
         return FamilyPlannerRepository(
             appointmentDao = appointmentDao,
             scheduleEntryDao = scheduleEntryDao,
-            taskDao = taskDao
+            taskDao = taskDao,
+            memberDao = memberDao,
+            sessionManager = sessionManager,
+            syncManager = syncManager
         )
     }
 
