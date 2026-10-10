@@ -55,7 +55,10 @@ data class ScheduleEntryEntity(
     val familyId: String = "local_family",
     val updatedAt: Long = System.currentTimeMillis(),
     val isDeleted: Boolean = false,
-    val syncStatus: SyncStatus = SyncStatus.PENDING
+    val syncStatus: SyncStatus = SyncStatus.PENDING,
+    val scheduleUpdatedAt: Long = updatedAt,
+    val contentUpdatedAt: Long = updatedAt,
+    val statusUpdatedAt: Long = updatedAt
 ) {
     fun toFamilyEvent(): FamilyEvent = FamilyEvent(
         id = id,
@@ -73,7 +76,10 @@ data class ScheduleEntryEntity(
         recurrenceGroupId = recurrenceGroupId,
         familyId = familyId,
         updatedAt = updatedAt,
-        isDeleted = isDeleted
+        isDeleted = isDeleted,
+        scheduleUpdatedAt = scheduleUpdatedAt,
+        contentUpdatedAt = contentUpdatedAt,
+        statusUpdatedAt = statusUpdatedAt
     )
 }
 
@@ -83,6 +89,7 @@ fun FamilyEvent.toScheduleEntity(familyId: String = "local_family"): ScheduleEnt
         isTask -> ScheduleEntryType.TASK
         else -> ScheduleEntryType.EVENT
     }
+    val now = if (this.updatedAt > 0) this.updatedAt else System.currentTimeMillis()
     return ScheduleEntryEntity(
         id = id,
         title = title,
@@ -99,8 +106,11 @@ fun FamilyEvent.toScheduleEntity(familyId: String = "local_family"): ScheduleEnt
         recurrence = recurrence,
         recurrenceGroupId = recurrenceGroupId,
         familyId = if (this.familyId.isNotEmpty() && this.familyId != "local_family") this.familyId else familyId,
-        updatedAt = if (this.updatedAt > 0) this.updatedAt else System.currentTimeMillis(),
+        updatedAt = now,
         isDeleted = isDeleted,
-        syncStatus = SyncStatus.PENDING
+        syncStatus = SyncStatus.PENDING,
+        scheduleUpdatedAt = if (this.scheduleUpdatedAt > 0) this.scheduleUpdatedAt else now,
+        contentUpdatedAt = if (this.contentUpdatedAt > 0) this.contentUpdatedAt else now,
+        statusUpdatedAt = if (this.statusUpdatedAt > 0) this.statusUpdatedAt else now
     )
 }

@@ -62,7 +62,10 @@ data class FamilyEvent(
     val recurrenceGroupId: String? = null,
     val familyId: String = "local_family",
     val updatedAt: Long = System.currentTimeMillis(),
-    val isDeleted: Boolean = false
+    val isDeleted: Boolean = false,
+    val scheduleUpdatedAt: Long = updatedAt,
+    val contentUpdatedAt: Long = updatedAt,
+    val statusUpdatedAt: Long = updatedAt
 ) {
     val endTime: LocalTime
         get() = startTime.plusMinutes(durationMinutes.toLong())

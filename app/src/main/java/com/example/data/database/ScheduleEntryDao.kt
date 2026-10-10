@@ -54,10 +54,10 @@ interface ScheduleEntryDao {
     @Update
     suspend fun updateEntry(entry: ScheduleEntryEntity)
 
-    @Query("UPDATE schedule_entries SET isDeleted = 1, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
+    @Query("UPDATE schedule_entries SET isDeleted = 1, updatedAt = :updatedAt, statusUpdatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
     suspend fun softDeleteById(id: String, updatedAt: Long = System.currentTimeMillis())
 
-    @Query("UPDATE schedule_entries SET isDeleted = 1, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE recurrenceGroupId = :groupId")
+    @Query("UPDATE schedule_entries SET isDeleted = 1, updatedAt = :updatedAt, statusUpdatedAt = :updatedAt, syncStatus = 'PENDING' WHERE recurrenceGroupId = :groupId")
     suspend fun softDeleteByRecurrenceGroup(groupId: String, updatedAt: Long = System.currentTimeMillis())
 
     @Query("UPDATE schedule_entries SET syncStatus = :status WHERE id = :id")
@@ -72,7 +72,7 @@ interface ScheduleEntryDao {
     @Query("DELETE FROM schedule_entries WHERE recurrenceGroupId = :groupId")
     suspend fun deleteEntriesByRecurrenceGroup(groupId: String)
 
-    @Query("UPDATE schedule_entries SET isCompleted = :isCompleted, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
+    @Query("UPDATE schedule_entries SET isCompleted = :isCompleted, updatedAt = :updatedAt, statusUpdatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
     suspend fun setTaskCompleted(id: String, isCompleted: Boolean, updatedAt: Long = System.currentTimeMillis())
 
     @Query("SELECT COUNT(*) FROM schedule_entries WHERE isDeleted = 0")

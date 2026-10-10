@@ -54,13 +54,13 @@ interface AppointmentDao {
     @Update
     suspend fun updateAppointment(appointment: AppointmentEntity)
 
-    @Query("UPDATE appointments SET isCompleted = :isCompleted, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
+    @Query("UPDATE appointments SET isCompleted = :isCompleted, updatedAt = :updatedAt, statusUpdatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
     suspend fun setCompleted(id: String, isCompleted: Boolean, updatedAt: Long = System.currentTimeMillis())
 
-    @Query("UPDATE appointments SET isDeleted = 1, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
+    @Query("UPDATE appointments SET isDeleted = 1, updatedAt = :updatedAt, statusUpdatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
     suspend fun softDeleteById(id: String, updatedAt: Long = System.currentTimeMillis())
 
-    @Query("UPDATE appointments SET isDeleted = 1, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE recurrenceGroupId = :groupId")
+    @Query("UPDATE appointments SET isDeleted = 1, updatedAt = :updatedAt, statusUpdatedAt = :updatedAt, syncStatus = 'PENDING' WHERE recurrenceGroupId = :groupId")
     suspend fun softDeleteByRecurrenceGroup(groupId: String, updatedAt: Long = System.currentTimeMillis())
 
     @Query("UPDATE appointments SET syncStatus = :status WHERE id = :id")

@@ -254,10 +254,10 @@ class FamilyPlannerRepository(
         }
     }
 
-    fun addEvent(event: FamilyEvent) {
+    fun addEvent(event: FamilyEvent, horizonWeeks: Int = 8) {
         val famId = sessionManager?.getFamilyId() ?: "local_family"
         val eventsToInsert = if (event.recurrence != com.example.data.model.RecurrenceRule.NONE) {
-            generateRecurringEvents(event).map { it.copy(familyId = famId) }
+            generateRecurringEvents(event, horizonWeeks).map { it.copy(familyId = famId) }
         } else {
             listOf(event.copy(familyId = famId))
         }
@@ -269,64 +269,129 @@ class FamilyPlannerRepository(
         }
     }
 
-    private fun generateRecurringEvents(baseEvent: FamilyEvent): List<FamilyEvent> {
+    fun generateRecurringEvents(baseEvent: FamilyEvent, horizonWeeks: Int = 8): List<FamilyEvent> {
         val groupId = baseEvent.recurrenceGroupId ?: UUID.randomUUID().toString()
         val baseWithGroup = baseEvent.copy(recurrenceGroupId = groupId)
         val result = mutableListOf(baseWithGroup)
 
         val repetitions = when (baseEvent.recurrence) {
-            com.example.data.model.RecurrenceRule.DAILY -> 14
-            com.example.data.model.RecurrenceRule.WORKDAYS -> 10
-            com.example.data.model.RecurrenceRule.WEEKLY -> 8
-            com.example.data.model.RecurrenceRule.BIWEEKLY -> 6
-            com.example.data.model.RecurrenceRule.MONTHLY -> 4
+            com.example.data.model.RecurrenceRule.DAILY -> (horizonWeeks * 7).coerceIn(7, 60)
+            com.example.data.model.RecurrenceRule.WORKDAYS -> (horizonWeeks * 5).coerceIn(5, 50)
+            com.example.data.model.RecurrenceRule.WEEKLY -> horizonWeeks.coerceIn(2, 52)
+            com.example.data.model.RecurrenceRule.BIWEEKLY -> (horizonWeeks / 2).coerceIn(2, 26)
+            com.example.data.model.RecurrenceRule.MONTHLY -> (horizonWeeks / 4).coerceIn(2, 12)
             com.example.data.model.RecurrenceRule.NONE -> 0
         }
 
-        var created = 0
-        var dayOffset = 1
-
-        while (created < repetitions && dayOffset < 90) {
-            val nextDate = when (baseEvent.recurrence) {
-                com.example.data.model.RecurrenceRule.DAILY -> baseEvent.date.plusDays(dayOffset.toLong())
-                com.example.data.model.RecurrenceRule.WORKDAYS -> {
-                    val candidate = baseEvent.date.plusDays(dayOffset.toLong())
-                    if (candidate.dayOfWeek.value in 1..5) candidate else null
-                }
-                com.example.data.model.RecurrenceRule.WEEKLY -> baseEvent.date.plusWeeks(dayOffset.toLong())
-                com.example.data.model.RecurrenceRule.BIWEEKLY -> baseEvent.date.plusWeeks((dayOffset * 2).toLong())
-                com.example.data.model.RecurrenceRule.MONTHLY -> baseEvent.date.plusMonths(dayOffset.toLong())
-                com.example.data.model.RecurrenceRule.NONE -> null
-            }
-
-            if (nextDate != null) {
-                result.add(
-                    baseWithGroup.copy(
-                        id = UUID.randomUUID().toString(),
-                        date = nextDate
+        when (baseEvent.recurrence) {
+            com.example.data.model.RecurrenceRule.DAILY -> {
+                for (i in 1..repetitions) {
+                    result.add(
+                        baseWithGroup.copy(
+                            id = UUID.randomUUID().toString(),
+                            date = baseEvent.date.plusDays(i.toLong())
+                        )
                     )
-                )
-                created++
+                }
             }
-            dayOffset++
+            com.example.data.model.RecurrenceRule.WORKDAYS -> {
+                var curDate = baseEvent.date.plusDays(1)
+                var count = 0
+                while (count < repetitions) {
+                    if (curDate.dayOfWeek.value in 1..5) {
+                        result.add(
+                            baseWithGroup.copy(
+                                id = UUID.randomUUID().toString(),
+                                date = curDate
+                            )
+                        )
+                        count++
+                    }
+                    curDate = curDate.plusDays(1)
+                }
+            }
+            com.example.data.model.RecurrenceRule.WEEKLY -> {
+                for (i in 1..repetitions) {
+                    result.add(
+                        baseWithGroup.copy(
+                            id = UUID.randomUUID().toString(),
+                            date = baseEvent.date.plusWeeks(i.toLong())
+                        )
+                    )
+                }
+            }
+            com.example.data.model.RecurrenceRule.BIWEEKLY -> {
+                for (i in 1..repetitions) {
+                    result.add(
+                        baseWithGroup.copy(
+                            id = UUID.randomUUID().toString(),
+                            date = baseEvent.date.plusWeeks((i * 2).toLong())
+                        )
+                    )
+                }
+            }
+            com.example.data.model.RecurrenceRule.MONTHLY -> {
+                for (i in 1..repetitions) {
+                    result.add(
+                        baseWithGroup.copy(
+                            id = UUID.randomUUID().toString(),
+                            date = baseEvent.date.plusMonths(i.toLong())
+                        )
+                    )
+                }
+            }
+            com.example.data.model.RecurrenceRule.NONE -> {
+                // No extra occurrences
+            }
         }
+
         return result
     }
 
     fun toggleEventCompleted(eventId: String) {
         val target = _events.value.find { it.id == eventId }
         val newStatus = !(target?.isCompleted ?: false)
-        _events.value = _events.value.map { if (it.id == eventId) it.copy(isCompleted = newStatus) else it }
+        val now = System.currentTimeMillis()
+        _events.value = _events.value.map {
+            if (it.id == eventId) it.copy(isCompleted = newStatus, updatedAt = now, statusUpdatedAt = now) else it
+        }
         coroutineScope.launch {
-            appointmentDao?.setCompleted(eventId, newStatus)
-            scheduleEntryDao?.setTaskCompleted(eventId, newStatus)
+            appointmentDao?.setCompleted(eventId, newStatus, now)
+            scheduleEntryDao?.setTaskCompleted(eventId, newStatus, now)
             syncManager?.triggerSync()
         }
     }
 
     fun updateEvent(event: FamilyEvent) {
         val famId = sessionManager?.getFamilyId() ?: "local_family"
-        val updated = event.copy(familyId = famId, updatedAt = System.currentTimeMillis())
+        val existing = _events.value.find { it.id == event.id }
+        val now = System.currentTimeMillis()
+
+        val scheduleChanged = existing == null ||
+            existing.date != event.date ||
+            existing.startTime != event.startTime ||
+            existing.durationMinutes != event.durationMinutes ||
+            existing.planningType != event.planningType ||
+            existing.recurrence != event.recurrence ||
+            existing.recurrenceGroupId != event.recurrenceGroupId
+
+        val contentChanged = existing == null ||
+            existing.title != event.title ||
+            existing.notes != event.notes ||
+            existing.caregiver != event.caregiver ||
+            existing.personId != event.personId
+
+        val statusChanged = existing == null ||
+            existing.isCompleted != event.isCompleted ||
+            existing.isDeleted != event.isDeleted
+
+        val updated = event.copy(
+            familyId = famId,
+            updatedAt = now,
+            scheduleUpdatedAt = if (scheduleChanged) now else (existing?.scheduleUpdatedAt ?: now),
+            contentUpdatedAt = if (contentChanged) now else (existing?.contentUpdatedAt ?: now),
+            statusUpdatedAt = if (statusChanged) now else (existing?.statusUpdatedAt ?: now)
+        )
         _events.value = _events.value.map { if (it.id == event.id) updated else it }
         coroutineScope.launch {
             appointmentDao?.updateAppointment(updated.toEntity(famId))
@@ -336,10 +401,53 @@ class FamilyPlannerRepository(
     }
 
     fun deleteEvent(eventId: String) {
+        val now = System.currentTimeMillis()
         _events.value = _events.value.filter { it.id != eventId }
         coroutineScope.launch {
-            appointmentDao?.softDeleteById(eventId)
-            scheduleEntryDao?.softDeleteById(eventId)
+            appointmentDao?.softDeleteById(eventId, now)
+            scheduleEntryDao?.softDeleteById(eventId, now)
+            syncManager?.triggerSync()
+        }
+    }
+
+    fun updateRecurringSeries(updatedEvent: FamilyEvent) {
+        val groupId = updatedEvent.recurrenceGroupId
+        if (groupId == null) {
+            updateEvent(updatedEvent)
+            return
+        }
+        val famId = sessionManager?.getFamilyId() ?: "local_family"
+        val now = System.currentTimeMillis()
+        _events.value = _events.value.map { current ->
+            if (current.recurrenceGroupId == groupId) {
+                current.copy(
+                    title = updatedEvent.title,
+                    personId = updatedEvent.personId,
+                    startTime = updatedEvent.startTime,
+                    durationMinutes = updatedEvent.durationMinutes,
+                    planningType = updatedEvent.planningType,
+                    caregiver = updatedEvent.caregiver,
+                    notes = updatedEvent.notes,
+                    updatedAt = now,
+                    scheduleUpdatedAt = now,
+                    contentUpdatedAt = now
+                )
+            } else current
+        }
+        coroutineScope.launch {
+            val affected = _events.value.filter { it.recurrenceGroupId == groupId }
+            appointmentDao?.insertAppointments(affected.map { it.toEntity(famId) })
+            scheduleEntryDao?.insertEntries(affected.map { it.toScheduleEntity(famId) })
+            syncManager?.triggerSync()
+        }
+    }
+
+    fun deleteRecurringSeries(groupId: String) {
+        val now = System.currentTimeMillis()
+        _events.value = _events.value.filter { it.recurrenceGroupId != groupId }
+        coroutineScope.launch {
+            appointmentDao?.softDeleteByRecurrenceGroup(groupId, now)
+            scheduleEntryDao?.softDeleteByRecurrenceGroup(groupId, now)
             syncManager?.triggerSync()
         }
     }

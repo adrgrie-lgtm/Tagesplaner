@@ -187,10 +187,12 @@ class FamilyPlannerViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedPersonFilter = personId)
     }
 
-    fun openAddEventDialog(eventToEdit: FamilyEvent? = null) {
+    fun openAddEventDialog(eventToEdit: FamilyEvent? = null, initialDate: LocalDate? = null) {
+        val date = initialDate ?: eventToEdit?.date ?: _uiState.value.selectedDate
         _uiState.value = _uiState.value.copy(
             showAddDialog = true,
-            editingEvent = eventToEdit
+            editingEvent = eventToEdit,
+            selectedDate = date
         )
     }
 
@@ -218,14 +220,19 @@ class FamilyPlannerViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(showFamilyMode = enabled)
     }
 
-    fun saveEvent(event: FamilyEvent) {
+    fun saveEvent(event: FamilyEvent, updateSeries: Boolean = false, horizonWeeks: Int = 12) {
         if (_uiState.value.editingEvent != null) {
-            repository.updateEvent(event)
-            showSnackbar("Eintrag '${event.title}' aktualisiert")
+            if (updateSeries && event.recurrenceGroupId != null) {
+                repository.updateRecurringSeries(event)
+                showSnackbar("Alle Termine der Serie '${event.title}' aktualisiert")
+            } else {
+                repository.updateEvent(event)
+                showSnackbar("Eintrag '${event.title}' aktualisiert")
+            }
         } else {
-            repository.addEvent(event)
+            repository.addEvent(event, horizonWeeks = horizonWeeks)
             val recurrenceMsg = if (event.recurrence != com.example.data.model.RecurrenceRule.NONE) {
-                " (${event.recurrence.shortLabel} wiederholt)"
+                " (${event.recurrence.shortLabel} für $horizonWeeks Wochen)"
             } else ""
             val typeMsg = if (event.isTask) "Aufgabe" else "Termin"
             showSnackbar("$typeMsg '${event.title}' hinzugefügt$recurrenceMsg")
@@ -243,6 +250,11 @@ class FamilyPlannerViewModel @Inject constructor(
     fun deleteEvent(eventId: String) {
         repository.deleteEvent(eventId)
         showSnackbar("Termin gelöscht")
+    }
+
+    fun deleteRecurringSeries(groupId: String) {
+        repository.deleteRecurringSeries(groupId)
+        showSnackbar("Ganze Terminserie gelöscht")
     }
 
     fun triggerPlanChange(

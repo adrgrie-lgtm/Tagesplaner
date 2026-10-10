@@ -37,6 +37,20 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import java.time.Instant
+import java.time.ZoneOffset
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -85,8 +99,41 @@ fun TodayScreen(
     onResolveConflictClick: () -> Unit,
     onApplyProposal: () -> Unit,
     onDismissProposal: () -> Unit,
+    onSelectDate: ((LocalDate) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    var showDatePickerDialog by remember { mutableStateOf(false) }
+
+    if (showDatePickerDialog && onSelectDate != null) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = currentDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePickerDialog = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            val chosen = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
+                            onSelectDate(chosen)
+                        }
+                        showDatePickerDialog = false
+                    },
+                    modifier = Modifier.testTag("today_picker_confirm_button")
+                ) {
+                    Text("Übernehmen", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePickerDialog = false }) {
+                    Text("Abbrechen")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
     val germanFormatter = DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.GERMAN)
     val formattedDate = currentDate.format(germanFormatter)
 
@@ -112,9 +159,16 @@ fun TodayScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val isToday = currentDate == LocalDate.now()
+                    val headlineTitle = when {
+                        isToday -> "Heute"
+                        currentDate == LocalDate.now().plusDays(1) -> "Morgen"
+                        currentDate == LocalDate.now().minusDays(1) -> "Gestern"
+                        else -> currentDate.format(DateTimeFormatter.ofPattern("EEEE", Locale.GERMAN))
+                    }
                     Column {
                         Text(
-                            text = "Heute",
+                            text = headlineTitle,
                             style = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -165,6 +219,71 @@ fun TodayScreen(
                                 text = "Jetzt wichtig",
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
+                // Day Navigator: < [Datum / Zu Heute springen] >
+                if (onSelectDate != null) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { onSelectDate(currentDate.minusDays(1)) },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("today_prev_day_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Vorheriger Tag",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            if (currentDate != LocalDate.now()) {
+                                FilterChip(
+                                    selected = false,
+                                    onClick = { onSelectDate(LocalDate.now()) },
+                                    label = { Text("Zu Heute springen") },
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.testTag("jump_to_today_chip")
+                                )
+                            }
+                            FilterChip(
+                                selected = false,
+                                onClick = { showDatePickerDialog = true },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarToday,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                label = { Text("Anderer Tag...") },
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.testTag("today_open_calendar_chip")
+                            )
+                        }
+
+                        IconButton(
+                            onClick = { onSelectDate(currentDate.plusDays(1)) },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("today_next_day_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Nächster Tag",
+                                tint = MaterialTheme.colorScheme.primary
                             )
                         }
                     }

@@ -58,3 +58,32 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         db.execSQL("CREATE INDEX IF NOT EXISTS index_members_isDeleted ON members(isDeleted)")
     }
 }
+
+/**
+ * Room Migration from version 4 to version 5:
+ * Adds granular field-level conflict timestamps:
+ * - scheduleUpdatedAt (date, start time, duration, recurrence)
+ * - contentUpdatedAt (title, notes, caregiver, personId)
+ * - statusUpdatedAt (isCompleted, isDeleted)
+ * for appointments, schedule_entries, and tasks.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        val now = System.currentTimeMillis()
+
+        // 1. appointments table
+        db.execSQL("ALTER TABLE appointments ADD COLUMN scheduleUpdatedAt INTEGER NOT NULL DEFAULT $now")
+        db.execSQL("ALTER TABLE appointments ADD COLUMN contentUpdatedAt INTEGER NOT NULL DEFAULT $now")
+        db.execSQL("ALTER TABLE appointments ADD COLUMN statusUpdatedAt INTEGER NOT NULL DEFAULT $now")
+
+        // 2. schedule_entries table
+        db.execSQL("ALTER TABLE schedule_entries ADD COLUMN scheduleUpdatedAt INTEGER NOT NULL DEFAULT $now")
+        db.execSQL("ALTER TABLE schedule_entries ADD COLUMN contentUpdatedAt INTEGER NOT NULL DEFAULT $now")
+        db.execSQL("ALTER TABLE schedule_entries ADD COLUMN statusUpdatedAt INTEGER NOT NULL DEFAULT $now")
+
+        // 3. tasks table
+        db.execSQL("ALTER TABLE tasks ADD COLUMN scheduleUpdatedAt INTEGER NOT NULL DEFAULT $now")
+        db.execSQL("ALTER TABLE tasks ADD COLUMN contentUpdatedAt INTEGER NOT NULL DEFAULT $now")
+        db.execSQL("ALTER TABLE tasks ADD COLUMN statusUpdatedAt INTEGER NOT NULL DEFAULT $now")
+    }
+}

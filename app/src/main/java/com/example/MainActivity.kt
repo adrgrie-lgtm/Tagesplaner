@@ -191,7 +191,8 @@ fun FamilienplanerApp(
                             onAddNewEvent = { viewModel.openAddEventDialog(null) },
                             onResolveConflictClick = { viewModel.resolveCaregiverConflict() },
                             onApplyProposal = { viewModel.applyProposal() },
-                            onDismissProposal = { viewModel.dismissProposal() }
+                            onDismissProposal = { viewModel.dismissProposal() },
+                            onSelectDate = { viewModel.selectDate(it) }
                         )
                     }
 
@@ -274,9 +275,15 @@ fun FamilienplanerApp(
             eventToEdit = uiState.editingEvent,
             members = members,
             onDismiss = { viewModel.closeAddEventDialog() },
-            onSave = { viewModel.saveEvent(it) },
+            onSave = { event, updateSeries, horizonWeeks ->
+                viewModel.saveEvent(event, updateSeries = updateSeries, horizonWeeks = horizonWeeks)
+            },
             onDelete = { id ->
                 viewModel.deleteEvent(id)
+                viewModel.closeAddEventDialog()
+            },
+            onDeleteSeries = { groupId ->
+                viewModel.deleteRecurringSeries(groupId)
                 viewModel.closeAddEventDialog()
             }
         )

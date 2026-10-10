@@ -47,5 +47,8 @@ data class TaskEntity(
     val familyId: String = "local_family",
     val updatedAt: Long = System.currentTimeMillis(),
     val isDeleted: Boolean = false,
-    val syncStatus: SyncStatus = SyncStatus.PENDING
+    val syncStatus: SyncStatus = SyncStatus.PENDING,
+    val scheduleUpdatedAt: Long = updatedAt,
+    val contentUpdatedAt: Long = updatedAt,
+    val statusUpdatedAt: Long = updatedAt
 )

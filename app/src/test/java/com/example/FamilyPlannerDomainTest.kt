@@ -100,4 +100,132 @@ class FamilyPlannerDomainTest {
         assertEquals(RecurrenceRule.BIWEEKLY, restored.recurrence)
         assertFalse(restored.isTask)
     }
+
+    @Test
+    fun `test adding event for custom date stores exact date`() {
+        val repo = FamilyPlannerRepository()
+        val futureDate = LocalDate.of(2026, 11, 15)
+        val event = FamilyEvent(
+            id = "future_dentist",
+            title = "Zahnarztkontrolle",
+            personId = "papa",
+            date = futureDate,
+            startTime = LocalTime.of(9, 30),
+            durationMinutes = 45,
+            planningType = PlanningType.FIXED
+        )
+
+        repo.addEvent(event)
+
+        val saved = repo.events.value.first { it.id == "future_dentist" }
+        assertEquals(futureDate, saved.date)
+        assertEquals(LocalTime.of(9, 30), saved.startTime)
+    }
+
+    @Test
+    fun `test custom recurrence horizon weeks expands accurately`() {
+        val repo = FamilyPlannerRepository()
+        val startDate = LocalDate.of(2026, 10, 1)
+        val event = FamilyEvent(
+            id = "course_daily",
+            title = "Schwimmkurs Intensiv",
+            personId = "louis",
+            date = startDate,
+            startTime = LocalTime.of(10, 0),
+            durationMinutes = 45,
+            planningType = PlanningType.FIXED,
+            recurrence = RecurrenceRule.DAILY
+        )
+
+        // Repeat daily for 2 weeks (14 repetitions + 1 base = 15 total)
+        val recurring = repo.generateRecurringEvents(event, horizonWeeks = 2)
+        assertEquals(15, recurring.size)
+        assertEquals(startDate, recurring.first().date)
+        assertEquals(startDate.plusDays(14), recurring.last().date)
+    }
+
+    @Test
+    fun `test updating recurring series updates all instances in group`() {
+        val repo = FamilyPlannerRepository()
+        val baseDate = LocalDate.of(2026, 10, 5)
+        val baseEvent = FamilyEvent(
+            id = "series_base",
+            title = "Musikschule",
+            personId = "louis",
+            date = baseDate,
+            startTime = LocalTime.of(14, 0),
+            durationMinutes = 45,
+            planningType = PlanningType.FIXED,
+            recurrence = RecurrenceRule.WEEKLY
+        )
+
+        repo.addEvent(baseEvent, horizonWeeks = 4) // base + 4 weeks = 5 events
+        val groupEvents = repo.events.value.filter { it.title == "Musikschule" }
+        assertEquals(5, groupEvents.size)
+        val groupId = groupEvents.first().recurrenceGroupId
+        assertNotNull(groupId)
+
+        // Now update the series with new time and title
+        val updatedFirst = groupEvents.first().copy(
+            title = "Musikschule Geige",
+            startTime = LocalTime.of(15, 30)
+        )
+        repo.updateRecurringSeries(updatedFirst)
+
+        val updatedGroup = repo.events.value.filter { it.recurrenceGroupId == groupId }
+        assertEquals(5, updatedGroup.size)
+        assertTrue(updatedGroup.all { it.title == "Musikschule Geige" })
+        assertTrue(updatedGroup.all { it.startTime == LocalTime.of(15, 30) })
+    }
+
+    @Test
+    fun `test deleting recurring series deletes all group events`() {
+        val repo = FamilyPlannerRepository()
+        val baseDate = LocalDate.of(2026, 10, 12)
+        val baseEvent = FamilyEvent(
+            id = "tennis_base",
+            title = "Tennis",
+            personId = "mama",
+            date = baseDate,
+            startTime = LocalTime.of(18, 0),
+            durationMinutes = 60,
+            planningType = PlanningType.FIXED,
+            recurrence = RecurrenceRule.WEEKLY
+        )
+
+        repo.addEvent(baseEvent, horizonWeeks = 3)
+        val groupEvents = repo.events.value.filter { it.title == "Tennis" }
+        assertEquals(4, groupEvents.size)
+        val groupId = groupEvents.first().recurrenceGroupId!!
+
+        repo.deleteRecurringSeries(groupId)
+        val remaining = repo.events.value.filter { it.recurrenceGroupId == groupId }
+        assertTrue(remaining.isEmpty())
+    }
+
+    @Test
+    fun `test deleting single occurrence keeps other recurring instances`() {
+        val repo = FamilyPlannerRepository()
+        val baseDate = LocalDate.of(2026, 10, 19)
+        val baseEvent = FamilyEvent(
+            id = "yoga_base",
+            title = "Yoga",
+            personId = "mama",
+            date = baseDate,
+            startTime = LocalTime.of(19, 0),
+            durationMinutes = 60,
+            planningType = PlanningType.FIXED,
+            recurrence = RecurrenceRule.WEEKLY
+        )
+
+        repo.addEvent(baseEvent, horizonWeeks = 3)
+        val groupEvents = repo.events.value.filter { it.title == "Yoga" }
+        assertEquals(4, groupEvents.size)
+        val toDelete = groupEvents[1]
+
+        repo.deleteEvent(toDelete.id)
+        val remaining = repo.events.value.filter { it.title == "Yoga" }
+        assertEquals(3, remaining.size)
+        assertFalse(remaining.any { it.id == toDelete.id })
+    }
 }

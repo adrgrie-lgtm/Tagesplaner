@@ -66,13 +66,13 @@ interface TaskDao {
     @Update
     suspend fun updateTask(task: TaskEntity)
 
-    @Query("UPDATE tasks SET isCompleted = :isCompleted, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
+    @Query("UPDATE tasks SET isCompleted = :isCompleted, updatedAt = :updatedAt, statusUpdatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
     suspend fun setTaskCompleted(id: String, isCompleted: Boolean, updatedAt: Long = System.currentTimeMillis())
 
-    @Query("UPDATE tasks SET priorityLevel = :priorityLevel, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
+    @Query("UPDATE tasks SET priorityLevel = :priorityLevel, updatedAt = :updatedAt, scheduleUpdatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
     suspend fun updatePriority(id: String, priorityLevel: PriorityLevel, updatedAt: Long = System.currentTimeMillis())
 
-    @Query("UPDATE tasks SET isDeleted = 1, updatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
+    @Query("UPDATE tasks SET isDeleted = 1, updatedAt = :updatedAt, statusUpdatedAt = :updatedAt, syncStatus = 'PENDING' WHERE id = :id")
     suspend fun softDeleteTaskById(id: String, updatedAt: Long = System.currentTimeMillis())
 
     @Query("UPDATE tasks SET syncStatus = :status WHERE id = :id")

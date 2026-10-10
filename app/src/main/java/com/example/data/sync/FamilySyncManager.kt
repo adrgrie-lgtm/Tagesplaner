@@ -151,7 +151,7 @@ class FamilySyncManager(
             val uid = authService.getOrCreateAnonymousUser()
             sessionManager.setFirebaseUid(uid)
 
-            // Look up family by inviteCode
+            // 1. Query family with this inviteCode
             val querySnapshot = db.collection("families")
                 .whereEqualTo("inviteCode", inviteCode.trim().uppercase())
                 .limit(1)
@@ -159,21 +159,22 @@ class FamilySyncManager(
                 .await()
 
             if (querySnapshot.isEmpty) {
-                return Result.failure(IllegalArgumentException("Ungültiger Familiencode. Bitte überprüfe die Eingabe."))
+                return Result.failure(IllegalArgumentException("Ungültiger Familiencode. Bitte prüfe die Eingabe."))
             }
 
-            val familyDoc = querySnapshot.documents[0]
-            val familyId = familyDoc.getString("id") ?: familyDoc.id
-            val familyName = familyDoc.getString("name") ?: "Familie"
+            val familyDoc = querySnapshot.documents.first()
+            val familyId = familyDoc.id
+            val familyName = familyDoc.getString("name") ?: "Unsere Familie"
 
-            @Suppress("UNCHECKED_CAST")
-            val currentUids = (familyDoc.get("memberUids") as? List<String>)?.toMutableList() ?: mutableListOf()
+            // 2. Add current UID to family document
+            val currentUids = (familyDoc.get("memberUids") as? List<*>)?.filterIsInstance<String>() ?: emptyList()
             if (!currentUids.contains(uid)) {
-                currentUids.add(uid)
-                familyDoc.reference.update("memberUids", currentUids).await()
+                db.collection("families").document(familyId)
+                    .update("memberUids", currentUids + uid)
+                    .await()
             }
 
-            // Register member profile
+            // 3. Create member in family subcollection
             val memberId = "mem_" + UUID.randomUUID().toString().take(8)
             val member = MemberEntity(
                 id = memberId,
@@ -191,6 +192,7 @@ class FamilySyncManager(
             db.collection("families").document(familyId).collection("members").document(memberId)
                 .set(memberEntityToMap(member)).await()
 
+            // 4. Save session
             sessionManager.saveFamilySession(
                 familyId = familyId,
                 familyName = familyName,
@@ -305,19 +307,47 @@ class FamilySyncManager(
             }
     }
 
-    // Last-Write-Wins handler for appointments
-    private suspend fun handleRemoteAppointment(remote: AppointmentEntity) {
+    // Field-level conflict resolution handler for appointments
+    suspend fun handleRemoteAppointment(remote: AppointmentEntity) {
         val local = appointmentDao.getAppointmentRawById(remote.id)
         if (local == null) {
             appointmentDao.insertAppointment(remote.copy(syncStatus = SyncStatus.SYNCED))
             val se = mapAppointmentToScheduleEntry(remote.copy(syncStatus = SyncStatus.SYNCED))
             scheduleEntryDao.insertEntry(se)
-        } else {
-            // Last-Write-Wins by updatedAt timestamp
+            return
+        }
+
+        if (local.syncStatus == SyncStatus.SYNCED) {
+            // No local edits pending: accept remote if newer
             if (remote.updatedAt > local.updatedAt) {
                 appointmentDao.insertAppointment(remote.copy(syncStatus = SyncStatus.SYNCED))
                 val se = mapAppointmentToScheduleEntry(remote.copy(syncStatus = SyncStatus.SYNCED))
                 scheduleEntryDao.insertEntry(se)
+            }
+        } else {
+            // CONFLICT SCENARIO: Local has PENDING unsynced edits, and remote update has arrived!
+            // Apply field-level conflict resolution:
+            val merged = resolveAppointmentConflict(local, remote)
+            appointmentDao.insertAppointment(merged)
+            val se = mapAppointmentToScheduleEntry(merged)
+            scheduleEntryDao.insertEntry(se)
+
+            // If local winning changes were preserved, push the merged result to Firestore
+            if (merged.syncStatus == SyncStatus.PENDING) {
+                val familyId = sessionManager.getFamilyId()
+                if (familyId.isNotEmpty() && familyId != "local_family") {
+                    coroutineScope.launch {
+                        try {
+                            val payload = appointmentEntityToMap(merged.copy(familyId = familyId))
+                            db.collection("families").document(familyId).collection("events").document(merged.id)
+                                .set(payload).await()
+                            appointmentDao.updateSyncStatus(merged.id, SyncStatus.SYNCED)
+                            scheduleEntryDao.updateSyncStatus(merged.id, SyncStatus.SYNCED)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to push merged appointment conflict: ${e.message}")
+                        }
+                    }
+                }
             }
         }
     }
@@ -334,14 +364,36 @@ class FamilySyncManager(
         }
     }
 
-    // Last-Write-Wins handler for tasks
-    private suspend fun handleRemoteTask(remote: TaskEntity) {
+    // Field-level conflict resolution handler for tasks
+    suspend fun handleRemoteTask(remote: TaskEntity) {
         val local = taskDao.getTaskRawById(remote.id)
         if (local == null) {
             taskDao.insertTask(remote.copy(syncStatus = SyncStatus.SYNCED))
-        } else {
+            return
+        }
+
+        if (local.syncStatus == SyncStatus.SYNCED) {
             if (remote.updatedAt > local.updatedAt) {
                 taskDao.insertTask(remote.copy(syncStatus = SyncStatus.SYNCED))
+            }
+        } else {
+            val merged = resolveTaskConflict(local, remote)
+            taskDao.insertTask(merged)
+
+            if (merged.syncStatus == SyncStatus.PENDING) {
+                val familyId = sessionManager.getFamilyId()
+                if (familyId.isNotEmpty() && familyId != "local_family") {
+                    coroutineScope.launch {
+                        try {
+                            val payload = taskEntityToMap(merged.copy(familyId = familyId))
+                            db.collection("families").document(familyId).collection("tasks").document(merged.id)
+                                .set(payload).await()
+                            taskDao.updateSyncStatus(merged.id, SyncStatus.SYNCED)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to push merged task conflict: ${e.message}")
+                        }
+                    }
+                }
             }
         }
     }
@@ -365,6 +417,142 @@ class FamilySyncManager(
             return "$p1-$p2"
         }
 
+        /**
+         * Pure function for Field-Level Conflict Resolution between local and remote appointments.
+         * Ensures recurrence rules, dates, and schedule fields are NEVER accidentally overwritten
+         * by concurrent content/status edits.
+         */
+        fun resolveAppointmentConflict(
+            local: AppointmentEntity,
+            remote: AppointmentEntity
+        ): AppointmentEntity {
+            // 1. Resolve Schedule & Recurrence (date, startTime, durationMinutes, planningType, recurrence, recurrenceGroupId)
+            val useRemoteSchedule = remote.scheduleUpdatedAt > local.scheduleUpdatedAt
+            val resolvedDate = if (useRemoteSchedule) remote.date else local.date
+            val resolvedStartTime = if (useRemoteSchedule) remote.startTime else local.startTime
+            val resolvedDuration = if (useRemoteSchedule) remote.durationMinutes else local.durationMinutes
+            val resolvedPlanningType = if (useRemoteSchedule) remote.planningType else local.planningType
+            val resolvedRecurrence = if (useRemoteSchedule) remote.recurrence else local.recurrence
+            val resolvedRecurrenceGroupId = if (useRemoteSchedule) remote.recurrenceGroupId else local.recurrenceGroupId
+            val resolvedScheduleUpdatedAt = maxOf(local.scheduleUpdatedAt, remote.scheduleUpdatedAt)
+
+            // 2. Resolve Content & Metadata (title, notes, caregiver, personId, entryType)
+            val useRemoteContent = remote.contentUpdatedAt > local.contentUpdatedAt
+            val resolvedTitle = if (useRemoteContent) remote.title else local.title
+            val resolvedNotes = if (useRemoteContent) remote.notes else local.notes
+            val resolvedCaregiver = if (useRemoteContent) remote.caregiver else local.caregiver
+            val resolvedPersonId = if (useRemoteContent) remote.personId else local.personId
+            val resolvedEntryType = if (useRemoteContent) remote.entryType else local.entryType
+            val resolvedContentUpdatedAt = maxOf(local.contentUpdatedAt, remote.contentUpdatedAt)
+
+            // 3. Resolve Status & Tombstones (isCompleted, isDeleted)
+            val useRemoteStatus = remote.statusUpdatedAt > local.statusUpdatedAt
+            // Deletion logic: if either side marked deleted, deletion takes effect if its status timestamp is newer or equal
+            val resolvedIsDeleted = when {
+                remote.isDeleted && remote.statusUpdatedAt >= local.statusUpdatedAt -> true
+                local.isDeleted && local.statusUpdatedAt >= remote.statusUpdatedAt -> true
+                else -> false
+            }
+            val resolvedIsCompleted = if (useRemoteStatus) remote.isCompleted else local.isCompleted
+            val resolvedStatusUpdatedAt = maxOf(local.statusUpdatedAt, remote.statusUpdatedAt)
+
+            // 4. Determine overall merged updatedAt and syncStatus
+            val mergedUpdatedAt = maxOf(local.updatedAt, remote.updatedAt, System.currentTimeMillis())
+            val hasLocalWinningChanges = !useRemoteSchedule || !useRemoteContent || !useRemoteStatus
+
+            val finalSyncStatus = if (hasLocalWinningChanges && local.syncStatus == SyncStatus.PENDING) {
+                SyncStatus.PENDING
+            } else {
+                SyncStatus.SYNCED
+            }
+
+            return AppointmentEntity(
+                id = local.id,
+                title = resolvedTitle,
+                personId = resolvedPersonId,
+                date = resolvedDate,
+                startTime = resolvedStartTime,
+                durationMinutes = resolvedDuration,
+                planningType = resolvedPlanningType,
+                entryType = resolvedEntryType,
+                caregiver = resolvedCaregiver,
+                notes = resolvedNotes,
+                isCompleted = resolvedIsCompleted,
+                isTask = if (useRemoteSchedule) remote.isTask else local.isTask,
+                recurrence = resolvedRecurrence,
+                recurrenceGroupId = resolvedRecurrenceGroupId,
+                createdAt = minOf(local.createdAt, remote.createdAt),
+                familyId = remote.familyId.ifEmpty { local.familyId },
+                updatedAt = mergedUpdatedAt,
+                isDeleted = resolvedIsDeleted,
+                syncStatus = finalSyncStatus,
+                scheduleUpdatedAt = resolvedScheduleUpdatedAt,
+                contentUpdatedAt = resolvedContentUpdatedAt,
+                statusUpdatedAt = resolvedStatusUpdatedAt
+            )
+        }
+
+        /**
+         * Pure function for Field-Level Conflict Resolution between local and remote tasks.
+         */
+        fun resolveTaskConflict(
+            local: TaskEntity,
+            remote: TaskEntity
+        ): TaskEntity {
+            // 1. Resolve Schedule (date, startTime, endTime, priorityLevel)
+            val useRemoteSchedule = remote.scheduleUpdatedAt > local.scheduleUpdatedAt
+            val resolvedDate = if (useRemoteSchedule) remote.date else local.date
+            val resolvedStartTime = if (useRemoteSchedule) remote.startTime else local.startTime
+            val resolvedEndTime = if (useRemoteSchedule) remote.endTime else local.endTime
+            val resolvedPriority = if (useRemoteSchedule) remote.priorityLevel else local.priorityLevel
+            val resolvedScheduleUpdatedAt = maxOf(local.scheduleUpdatedAt, remote.scheduleUpdatedAt)
+
+            // 2. Resolve Content (title, notes, personId)
+            val useRemoteContent = remote.contentUpdatedAt > local.contentUpdatedAt
+            val resolvedTitle = if (useRemoteContent) remote.title else local.title
+            val resolvedNotes = if (useRemoteContent) remote.notes else local.notes
+            val resolvedPersonId = if (useRemoteContent) remote.personId else local.personId
+            val resolvedContentUpdatedAt = maxOf(local.contentUpdatedAt, remote.contentUpdatedAt)
+
+            // 3. Resolve Status (isCompleted, isDeleted)
+            val useRemoteStatus = remote.statusUpdatedAt > local.statusUpdatedAt
+            val resolvedIsDeleted = when {
+                remote.isDeleted && remote.statusUpdatedAt >= local.statusUpdatedAt -> true
+                local.isDeleted && local.statusUpdatedAt >= remote.statusUpdatedAt -> true
+                else -> false
+            }
+            val resolvedIsCompleted = if (useRemoteStatus) remote.isCompleted else local.isCompleted
+            val resolvedStatusUpdatedAt = maxOf(local.statusUpdatedAt, remote.statusUpdatedAt)
+
+            val mergedUpdatedAt = maxOf(local.updatedAt, remote.updatedAt, System.currentTimeMillis())
+            val hasLocalWinningChanges = !useRemoteSchedule || !useRemoteContent || !useRemoteStatus
+            val finalSyncStatus = if (hasLocalWinningChanges && local.syncStatus == SyncStatus.PENDING) {
+                SyncStatus.PENDING
+            } else {
+                SyncStatus.SYNCED
+            }
+
+            return TaskEntity(
+                id = local.id,
+                title = resolvedTitle,
+                date = resolvedDate,
+                startTime = resolvedStartTime,
+                endTime = resolvedEndTime,
+                priorityLevel = resolvedPriority,
+                personId = resolvedPersonId,
+                notes = resolvedNotes,
+                isCompleted = resolvedIsCompleted,
+                createdAt = minOf(local.createdAt, remote.createdAt),
+                familyId = remote.familyId.ifEmpty { local.familyId },
+                updatedAt = mergedUpdatedAt,
+                isDeleted = resolvedIsDeleted,
+                syncStatus = finalSyncStatus,
+                scheduleUpdatedAt = resolvedScheduleUpdatedAt,
+                contentUpdatedAt = resolvedContentUpdatedAt,
+                statusUpdatedAt = resolvedStatusUpdatedAt
+            )
+        }
+
         fun appointmentEntityToMap(entity: AppointmentEntity): Map<String, Any?> = hashMapOf(
             "id" to entity.id,
             "title" to entity.title,
@@ -383,10 +571,14 @@ class FamilySyncManager(
             "createdAt" to entity.createdAt,
             "familyId" to entity.familyId,
             "updatedAt" to entity.updatedAt,
+            "scheduleUpdatedAt" to entity.scheduleUpdatedAt,
+            "contentUpdatedAt" to entity.contentUpdatedAt,
+            "statusUpdatedAt" to entity.statusUpdatedAt,
             "isDeleted" to entity.isDeleted
         )
 
         fun mapToAppointmentEntity(data: Map<String, Any?>): AppointmentEntity {
+            val updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
             return AppointmentEntity(
                 id = data["id"] as? String ?: UUID.randomUUID().toString(),
                 title = data["title"] as? String ?: "",
@@ -404,9 +596,12 @@ class FamilySyncManager(
                 recurrenceGroupId = data["recurrenceGroupId"] as? String,
                 createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
                 familyId = data["familyId"] as? String ?: "local_family",
-                updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                updatedAt = updatedAt,
                 isDeleted = data["isDeleted"] as? Boolean ?: false,
-                syncStatus = SyncStatus.SYNCED
+                syncStatus = SyncStatus.SYNCED,
+                scheduleUpdatedAt = (data["scheduleUpdatedAt"] as? Number)?.toLong() ?: updatedAt,
+                contentUpdatedAt = (data["contentUpdatedAt"] as? Number)?.toLong() ?: updatedAt,
+                statusUpdatedAt = (data["statusUpdatedAt"] as? Number)?.toLong() ?: updatedAt
             )
         }
 
@@ -423,10 +618,14 @@ class FamilySyncManager(
             "createdAt" to entity.createdAt,
             "familyId" to entity.familyId,
             "updatedAt" to entity.updatedAt,
+            "scheduleUpdatedAt" to entity.scheduleUpdatedAt,
+            "contentUpdatedAt" to entity.contentUpdatedAt,
+            "statusUpdatedAt" to entity.statusUpdatedAt,
             "isDeleted" to entity.isDeleted
         )
 
         fun mapToTaskEntity(data: Map<String, Any?>): TaskEntity {
+            val updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis()
             return TaskEntity(
                 id = data["id"] as? String ?: UUID.randomUUID().toString(),
                 title = data["title"] as? String ?: "",
@@ -439,9 +638,12 @@ class FamilySyncManager(
                 isCompleted = data["isCompleted"] as? Boolean ?: false,
                 createdAt = (data["createdAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
                 familyId = data["familyId"] as? String ?: "local_family",
-                updatedAt = (data["updatedAt"] as? Number)?.toLong() ?: System.currentTimeMillis(),
+                updatedAt = updatedAt,
                 isDeleted = data["isDeleted"] as? Boolean ?: false,
-                syncStatus = SyncStatus.SYNCED
+                syncStatus = SyncStatus.SYNCED,
+                scheduleUpdatedAt = (data["scheduleUpdatedAt"] as? Number)?.toLong() ?: updatedAt,
+                contentUpdatedAt = (data["contentUpdatedAt"] as? Number)?.toLong() ?: updatedAt,
+                statusUpdatedAt = (data["statusUpdatedAt"] as? Number)?.toLong() ?: updatedAt
             )
         }
 
@@ -492,7 +694,10 @@ class FamilySyncManager(
                 familyId = app.familyId,
                 updatedAt = app.updatedAt,
                 isDeleted = app.isDeleted,
-                syncStatus = app.syncStatus
+                syncStatus = app.syncStatus,
+                scheduleUpdatedAt = app.scheduleUpdatedAt,
+                contentUpdatedAt = app.contentUpdatedAt,
+                statusUpdatedAt = app.statusUpdatedAt
             )
         }
     }
