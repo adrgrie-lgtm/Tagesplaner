@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#6200ee">
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icon.svg">
-<title>📅 Familien-Tagesplaner</title>
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-512.png">
+<title>📅 Familien-Tagesplaner v9</title>
 <style>
 :root{--p:#6200ee;--pc:#e8ddff;--s:#03dac6;--sf:#f5f5f5;--e:#b00020;--sc:#4caf50;--os:#1c1b1f;--osv:#49454f}
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif}
@@ -51,6 +51,7 @@ body{background:var(--sf);color:var(--os);min-height:100vh}
 .b{padding:3px 8px;border-radius:6px;font-size:.7rem;font-weight:600;text-transform:uppercase}
 .b.task{background:#e8f5e9;color:#2e7d32}
 .b.recurring{background:#fff3e0;color:#e65100}
+.b.fixed{background:#ffebee;color:#c62828}
 .etl{font-size:1.1rem;font-weight:600;margin-bottom:6px}
 .ec.completed .etl{text-decoration:line-through;color:#666}
 .ep{display:inline-flex;align-items:center;gap:6px;background:#f0f0f0;padding:4px 10px;border-radius:6px;font-size:.85rem;margin-right:8px}
@@ -107,15 +108,23 @@ body{background:var(--sf);color:var(--os);min-height:100vh}
 <div class="ha">
 <div class="ss" id="syncStatus"><span class="si"></span><span id="syncText">Lokal (Offline)</span></div>
 <div class="finfo" id="familyInfo"></div>
+<button class="btn bs" style="background:rgba(255,255,255,.2);color:#fff" onclick="enableReminders()" title="Erinnerungen aktivieren">🔔</button>
 <button class="btn bp" onclick="openAddDialog()">+ Neu</button>
 </div>
 </div>
+</div>
+
+<div id="reminderBanner" style="display:none;background:#fff8e1;border-left:4px solid #ff9800;border-radius:12px;padding:14px 18px;margin:16px auto 0;max-width:1160px;box-shadow:0 1px 3px rgba(0,0,0,.1);align-items:center;gap:12px;flex-wrap:wrap">
+<span id="reminderText" style="flex:1;font-weight:600;min-width:200px"></span>
+<button class="bi" onclick="dismissReminder()">✕ Schließen</button>
 </div>
 
 <div class="nt">
 <button class="ntb active" onclick="switchTab('today')">Heute</button>
 <button class="ntb" onclick="switchTab('week')">Woche</button>
 <button class="ntb" onclick="switchTab('schedule')">Übersicht</button>
+<button class="ntb" onclick="switchTab('shopping')">🛒 Einkauf</button>
+<button class="ntb" onclick="switchTab('todos')">✅ To-dos</button>
 <button class="ntb" onclick="switchTab('family')">Familie</button>
 </div>
 
@@ -141,6 +150,27 @@ body{background:var(--sf);color:var(--os);min-height:100vh}
 <div class="sc"><div class="sv" id="recurringCount">0</div><div class="sl">Wiederkehrend</div></div>
 </div>
 <div class="es"><div class="el" id="allEvents"></div></div>
+</div>
+
+<div id="shopping" class="wv">
+<div class="wh"><h2 class="wt">🛒 Einkaufsliste</h2><p class="ws">Einfach aufschreiben – beim Einkauf abhaken ✓</p></div>
+<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+<input type="text" class="finput" id="newShopItem" placeholder="Was brauchen wir?" onkeydown="if(event.key==='Enter')addShopItem()" style="flex:1;min-width:180px">
+<button class="btn bp" onclick="addShopItem()" style="white-space:nowrap">+ Hinzufügen</button>
+<button class="btn bs" onclick="toggleSuggestions()" style="white-space:nowrap">💡 Vorschläge</button>
+</div>
+<div id="shopSuggestions" style="display:none;margin-bottom:20px"></div>
+<div class="el" id="shopList"></div>
+</div>
+
+<div id="todos" class="wv">
+<div class="wh"><h2 class="wt">✅ To-do-Liste</h2><p class="ws">Was zu tun ist – abhaken, wenn erledigt ✓</p></div>
+<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+<input type="text" class="finput" id="newTodoItem" placeholder="Was ist zu tun?" onkeydown="if(event.key==='Enter')addTodoItem()" style="flex:1;min-width:180px">
+<select class="finput" id="todoPerson" style="max-width:170px"><option value="family">👨‍👩‍👧‍👦 Alle</option></select>
+<button class="btn bp" onclick="addTodoItem()" style="white-space:nowrap">+ Hinzufügen</button>
+</div>
+<div class="el" id="todoList"></div>
 </div>
 
 <div id="family" class="wv">
@@ -176,6 +206,7 @@ body{background:var(--sf);color:var(--os);min-height:100vh}
 <div class="fg" style="flex:1"><label class="fl">Dauer (Min.)</label><input type="number" class="finput" id="eventDuration" value="45" min="15" max="480"></div>
 </div>
 <div class="fg"><label class="fl">Typ</label><select class="finput" id="eventType"><option value="event">📅 Termin</option><option value="task">✅ Aufgabe</option></select></div>
+<div class="fg"><label class="fl">Verbindlichkeit</label><select class="finput" id="eventFixity"><option value="flexible">🧩 Variabel</option><option value="fixed">🔒 Fester Termin (nicht verschiebbar)</option></select></div>
 <div class="fg"><label class="fl">Wiederholung</label><select class="finput" id="eventRecurrence"><option value="none">Einmalig</option><option value="daily">Täglich</option><option value="weekly">Wöchentlich</option><option value="monthly">Monatlich</option><option value="workdays">Mo-Fr</option></select></div>
 <div class="fg"><label class="fl">Notiz (optional)</label><textarea class="finput" id="eventNotes" rows="2" placeholder="Zusätzliche Informationen"></textarea></div>
 <div class="da"><button class="btn bs" onclick="closeDialog()">Abbrechen</button><button class="btn bp" onclick="saveEvent()">Speichern</button></div>
@@ -233,8 +264,11 @@ let events = [];
 let family = null;
 let members = [];
 let db = null;
-let unsubMembers = null, unsubEvents = null;
-let currentDate = new Date().toISOString().split('T')[0];
+let unsubMembers = null, unsubEvents = null, unsubShopping = null, unsubTodos = null;
+let shopping = [];
+let todos = [];
+function toLocalDateStr(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+let currentDate = toLocalDateStr(new Date());
 let selectedDate = currentDate;
 let editingEventId = null;
 let deleteEventId = null;
@@ -246,17 +280,23 @@ function loadLocal() {
   try { events = JSON.parse(localStorage.getItem('familienplaner_events')) || []; } catch (e) { events = []; }
   try { family = JSON.parse(localStorage.getItem('familienplaner_family')) || null; } catch (e) { family = null; }
   try { members = JSON.parse(localStorage.getItem('familienplaner_members')) || []; } catch (e) { members = []; }
+  try { shopping = JSON.parse(localStorage.getItem('familienplaner_shopping')) || []; } catch (e) { shopping = []; }
+  try { todos = JSON.parse(localStorage.getItem('familienplaner_todos')) || []; } catch (e) { todos = []; }
 }
 function saveLocalState() {
   localStorage.setItem('familienplaner_events', JSON.stringify(events));
   localStorage.setItem('familienplaner_family', JSON.stringify(family));
   localStorage.setItem('familienplaner_members', JSON.stringify(members));
+  localStorage.setItem('familienplaner_shopping', JSON.stringify(shopping));
+  localStorage.setItem('familienplaner_todos', JSON.stringify(todos));
 }
 function setSync(text) { document.getElementById('syncText').textContent = text; }
 function isSynced() { return !!(SYNC_ENABLED && db && family && family.inviteCode); }
 function famDoc(code) { return db.collection('families').doc(code); }
 function evCol(code) { return famDoc(code).collection('events'); }
 function memCol(code) { return famDoc(code).collection('members'); }
+function shopCol(code) { return famDoc(code).collection('shopping'); }
+function todoCol(code) { return famDoc(code).collection('todos'); }
 
 // ================= FIREBASE =================
 async function initSync() {
@@ -270,7 +310,7 @@ async function initSync() {
   } catch (err) {
     console.warn('Sync nicht verfuegbar:', err);
     db = null;
-    setSync('Lokal (Offline)');
+    setSync('Lokal (Offline – ' + ((err && err.message) ? err.message : String(err)) + ')');
   }
 }
 
@@ -289,6 +329,17 @@ function subscribeAll(code) {
     renderAllTabs(); updateDaySelector();
     setSync('Synchronisiert 🔗');
   }, function () { setSync('Offline – zeige lokalen Stand'); });
+  if (unsubShopping) unsubShopping();
+  unsubShopping = shopCol(code).onSnapshot(function (snap) {
+    shopping = snap.docs.map(function (d) { return d.data(); });
+    saveLocalState(); renderShopping();
+  }, function () { });
+  if (unsubTodos) unsubTodos();
+  unsubTodos = todoCol(code).onSnapshot(function (snap) {
+    todos = snap.docs.map(function (d) { return d.data(); });
+    saveLocalState(); renderTodos();
+  }, function (err) { console.warn('To-do-Sync-Fehler:', err); });
+  if ('Notification' in window && Notification.permission === 'granted') subscribePush();
 }
 
 // ================= FAMILIE =================
@@ -391,6 +442,18 @@ function renderFamilyMembers() {
     const card = document.createElement('div');
     card.className = 'ec';
     card.innerHTML = '<div class="eh"><span class="et">' + esc(member.emoji) + ' ' + esc(member.name) + '</span><span class="b" style="background:' + (member.color || '#6200ee') + ';color:white">' + esc(member.role) + '</span></div><div class="etl">' + esc(member.name) + '</div>';
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:8px;margin-top:12px;flex-wrap:wrap';
+    const editBtn = document.createElement('button');
+    editBtn.className = 'bi';
+    editBtn.textContent = '✏️ Bearbeiten';
+    editBtn.onclick = function () { editMember(member.id); };
+    const delBtn = document.createElement('button');
+    delBtn.className = 'bi delete';
+    delBtn.textContent = '🗑️ Entfernen';
+    delBtn.onclick = function () { if (confirm(member.name + ' wirklich entfernen?')) deleteMember(member.id); };
+    actions.appendChild(editBtn); actions.appendChild(delBtn);
+    card.appendChild(actions);
     container.appendChild(card);
   });
   const box = document.getElementById('inviteBox');
@@ -408,7 +471,7 @@ function renderFamilyMembers() {
     addBtn.onclick = function () {
       const name = prompt('Name des neuen Mitglieds:');
       if (!name) return;
-      const role = prompt('Rolle:', 'Kind') || 'Kind';
+      const role = prompt('Rolle (Mama, Papa, Eltern, Kind, Sonstiges):', 'Kind') || 'Kind';
       const emoji = prompt('Emoji:', '👧') || '👧';
       const member = { id: randId('mem'), name: name, role: role, emoji: emoji, color: getColorForRole(role), createdAt: new Date().toISOString() };
       members.push(member);
@@ -417,6 +480,26 @@ function renderFamilyMembers() {
     };
     container.appendChild(addBtn);
   }
+}
+
+function editMember(id) {
+  const member = members.find(function (m) { return m.id === id; });
+  if (!member) return;
+  const name = prompt('Name:', member.name); if (name === null) return;
+  const role = prompt('Rolle (z.B. Mama, Papa, Eltern, Kind, Sonstiges):', member.role || 'Sonstiges'); if (role === null) return;
+  const emoji = prompt('Emoji:', member.emoji || '👩'); if (emoji === null) return;
+  member.name = name.trim() || member.name;
+  member.role = role.trim() || member.role;
+  member.emoji = emoji.trim() || member.emoji;
+  member.color = getColorForRole(member.role);
+  member.updatedAt = new Date().toISOString();
+  saveLocalState(); updatePersonSelect(); renderFamilyMembers();
+  if (isSynced()) memCol(family.inviteCode).doc(member.id).set(member).catch(function (err) { alert('Sync-Fehler: ' + err.message); });
+}
+function deleteMember(id) {
+  members = members.filter(function (m) { return m.id !== id; });
+  saveLocalState(); updatePersonSelect(); renderFamilyMembers();
+  if (isSynced()) memCol(family.inviteCode).doc(id).delete().catch(function (err) { alert('Sync-Fehler: ' + err.message); });
 }
 
 function copyInviteCode() {
@@ -436,7 +519,7 @@ function generateInviteCode() {
 }
 
 function getColorForRole(role) {
-  const colors = { 'Mama': '#e91e63', 'Papa': '#2196f3', 'Kind': '#4caf50', 'Sonstiges': '#9c27b0', 'Mitglied': '#6200ee' };
+  const colors = { 'Mama': '#e91e63', 'Papa': '#2196f3', 'Eltern': '#ff9800', 'Kind': '#4caf50', 'Sonstiges': '#9c27b0', 'Mitglied': '#6200ee' };
   return colors[role] || '#6200ee';
 }
 
@@ -451,6 +534,7 @@ function openAddDialog(event) {
     document.getElementById('eventStartTime').value = event.startTime || '14:00';
     document.getElementById('eventDuration').value = event.durationMinutes || 45;
     document.getElementById('eventType').value = event.isTask ? 'task' : 'event';
+    document.getElementById('eventFixity').value = event.fixity === 'fixed' ? 'fixed' : 'flexible';
     document.getElementById('eventRecurrence').value = event.recurrence || 'none';
     document.getElementById('eventNotes').value = event.notes || '';
   } else {
@@ -463,6 +547,7 @@ function openAddDialog(event) {
     document.getElementById('eventStartTime').value = '14:00';
     document.getElementById('eventDuration').value = 45;
     document.getElementById('eventType').value = 'event';
+    document.getElementById('eventFixity').value = 'flexible';
     document.getElementById('eventRecurrence').value = 'none';
     document.getElementById('eventNotes').value = '';
   }
@@ -487,6 +572,7 @@ function saveEvent() {
   const duration = parseInt(document.getElementById('eventDuration').value) || 45;
   const type = document.getElementById('eventType').value;
   const recurrence = document.getElementById('eventRecurrence').value;
+  const fixity = document.getElementById('eventFixity').value;
   const notes = document.getElementById('eventNotes').value.trim();
 
   if (!title) { alert('Bitte geben Sie einen Titel ein'); return; }
@@ -502,6 +588,7 @@ function saveEvent() {
     durationMinutes: duration,
     isTask: type === 'task',
     recurrence: recurrence !== 'none' ? recurrence : null,
+    fixity: fixity === 'fixed' ? 'fixed' : 'flexible',
     notes: notes,
     isCompleted: existing ? existing.isCompleted : false,
     createdAt: existing ? existing.createdAt : new Date().toISOString(),
@@ -555,6 +642,193 @@ function confirmDelete() {
   closeDeleteDialog();
 }
 
+// ================= EINKAUFSLISTE =================
+let SHOP_SUGGESTIONS = ['Butter','Milch','Brot','Eier','Käse','Joghurt','Zucker','Mehl','Kaffee','Tee','Öl','Salz','Pfeffer','Nudeln','Reis','Kartoffeln','Zwiebeln','Knoblauch','Tomaten','Gurke','Äpfel','Bananen','Orangensaft','Mineralwasser','Toilettenpapier','Küchenrolle','Spülmittel','Waschmittel','Zahnpasta','Duschgel','Shampoo','Tierfutter'];
+(function () {
+  try {
+    const gespeichert = JSON.parse(localStorage.getItem('familienplaner_suggestions'));
+    if (Array.isArray(gespeichert)) SHOP_SUGGESTIONS = gespeichert;
+  } catch (e) { }
+})();
+
+function q(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+let suggestionsEditable = false;
+function toggleSuggestionEditMode() { suggestionsEditable = !suggestionsEditable; renderSuggestions(); }
+function toggleSuggestions() {
+  const box = document.getElementById('shopSuggestions');
+  if (box.style.display === 'none') { renderSuggestions(); box.style.display = 'block'; }
+  else { box.style.display = 'none'; }
+}
+function renderSuggestions() {
+  const box = document.getElementById('shopSuggestions');
+  let html = '<div class="ib" style="display:block"><div class="ibl" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap"><span>💡 Vorschläge – antippen zum Übernehmen</span><button class="bi" onclick="toggleSuggestionEditMode()">' + (suggestionsEditable ? '✓ Fertig' : '⚙️ Bearbeiten') + '</button></div><div style="display:flex;flex-wrap:wrap;gap:8px">';
+  SHOP_SUGGESTIONS.forEach(function (s) {
+    html += '<span class="bi" style="display:inline-flex;align-items:center;gap:8px"><span onclick="addFromSuggestion(\'' + q(s) + '\')" style="cursor:pointer">' + esc(s) + '</span>' + (suggestionsEditable ? '<span onclick="removeSuggestion(\'' + q(s) + '\')" title="Aus Vorschlägen entfernen" style="cursor:pointer;font-weight:700;color:#c62828">✕</span>' : '') + '</span>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap"><input type="text" class="finput" id="newSuggestion" placeholder="Eigener Vorschlag" onkeydown="if(event.key===\'Enter\')addSuggestion()" style="flex:1;min-width:140px"><button class="btn bp" onclick="addSuggestion()" style="white-space:nowrap">+ Vorschlag</button></div>';
+  html += '<div class="ihint" style="margin-top:10px">Zum Entfernen oder Hinzufügen von Vorschlägen: „⚙️ Bearbeiten“ antippen. Änderungen werden auf diesem Gerät dauerhaft gespeichert.</div></div>';
+  box.innerHTML = html;
+}
+function addSuggestion() {
+  const input = document.getElementById('newSuggestion');
+  const text = input.value.trim();
+  if (!text) return;
+  if (!SHOP_SUGGESTIONS.some(function (s) { return s.toLowerCase() === text.toLowerCase(); })) SHOP_SUGGESTIONS.push(text);
+  localStorage.setItem('familienplaner_suggestions', JSON.stringify(SHOP_SUGGESTIONS));
+  renderSuggestions();
+  const neu = document.getElementById('newSuggestion');
+  if (neu) neu.focus();
+}
+function removeSuggestion(name) {
+  SHOP_SUGGESTIONS = SHOP_SUGGESTIONS.filter(function (s) { return s !== name; });
+  localStorage.setItem('familienplaner_suggestions', JSON.stringify(SHOP_SUGGESTIONS));
+  renderSuggestions();
+}
+
+function addFromSuggestion(name) { addShopItemText(name); }
+
+function addShopItem() {
+  const input = document.getElementById('newShopItem');
+  const text = input.value.trim();
+  if (!text) return;
+  addShopItemText(text);
+  input.value = '';
+}
+
+function addShopItemText(text) {
+  const schonDrauf = shopping.some(function (i) { return i.name.toLowerCase() === text.toLowerCase() && !i.done; });
+  if (schonDrauf) return;
+  const item = { id: randId('shop'), name: text, done: false, createdAt: new Date().toISOString() };
+  if (isSynced()) {
+    shopCol(family.inviteCode).doc(item.id).set(item).catch(function (err) { alert('Sync-Fehler: ' + err.message); });
+  } else {
+    shopping.push(item);
+    saveLocalState(); renderShopping();
+  }
+}
+
+function toggleShopItem(id) {
+  const item = shopping.find(function (i) { return i.id === id; });
+  if (!item) return;
+  item.done = !item.done;
+  if (isSynced()) {
+    shopCol(family.inviteCode).doc(item.id).set(item).catch(function (err) { alert('Sync-Fehler: ' + err.message); });
+  } else { saveLocalState(); renderShopping(); }
+}
+
+function deleteShopItem(id) {
+  if (isSynced()) {
+    shopCol(family.inviteCode).doc(id).delete().catch(function (err) { alert('Sync-Fehler: ' + err.message); });
+  } else {
+    shopping = shopping.filter(function (i) { return i.id !== id; });
+    saveLocalState(); renderShopping();
+  }
+}
+
+function clearDoneShopItems() {
+  const doneItems = shopping.filter(function (i) { return i.done; });
+  if (doneItems.length === 0) return;
+  if (isSynced()) {
+    doneItems.forEach(function (i) { shopCol(family.inviteCode).doc(i.id).delete().catch(function () { }); });
+  } else {
+    shopping = shopping.filter(function (i) { return !i.done; });
+    saveLocalState(); renderShopping();
+  }
+}
+
+function renderShopping() {
+  const container = document.getElementById('shopList');
+  if (!container) return;
+  const open = shopping.filter(function (i) { return !i.done; });
+  const done = shopping.filter(function (i) { return i.done; });
+  if (shopping.length === 0) {
+    container.innerHTML = '<div class="es" style="text-align:center;padding:40px 20px"><div class="esi">🛒</div><h3>Die Liste ist leer</h3><p>Tragen Sie oben ein, was Sie brauchen – oder tippen Sie auf 💡 Vorschläge</p></div>';
+    return;
+  }
+  let html = '';
+  open.forEach(function (i) {
+    html += '<div class="ec" style="display:flex;align-items:center;gap:12px;padding:12px 16px">' +
+      '<button class="bi" style="font-size:1.2rem;padding:4px 12px" onclick="toggleShopItem(\'' + i.id + '\')">☐</button>' +
+      '<span style="flex:1;font-size:1.05rem;font-weight:500">' + esc(i.name) + '</span>' +
+      '<button class="bi delete" onclick="deleteShopItem(\'' + i.id + '\')">🗑️</button></div>';
+  });
+  if (done.length > 0) {
+    html += '<div class="sh" style="margin-top:20px"><span class="st">✓ Im Korb (' + done.length + ')</span><button class="bi" onclick="clearDoneShopItems()">Entfernen</button></div>';
+    done.forEach(function (i) {
+      html += '<div class="ec completed" style="display:flex;align-items:center;gap:12px;padding:12px 16px">' +
+        '<button class="bi complete" style="font-size:1.2rem;padding:4px 12px" onclick="toggleShopItem(\'' + i.id + '\')">☑</button>' +
+        '<span style="flex:1;font-size:1.05rem;text-decoration:line-through;color:#666">' + esc(i.name) + '</span>' +
+        '<button class="bi delete" onclick="deleteShopItem(\'' + i.id + '\')">🗑️</button></div>';
+    });
+  }
+  container.innerHTML = html;
+}
+
+// ================= TO-DO-LISTE =================
+function addTodoItem() {
+  const input = document.getElementById('newTodoItem');
+  const text = input.value.trim();
+  if (!text) return;
+  const sel = document.getElementById('todoPerson');
+  const item = { id: randId('todo'), name: text, personId: sel ? sel.value : 'family', done: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+  input.value = '';
+  if (isSynced()) {
+    todoCol(family.inviteCode).doc(item.id).set(item).catch(function (err) {
+      todos.push(item); saveLocalState(); renderTodos();
+      alert('To-do wurde lokal gespeichert, aber NICHT synchronisiert.\n\nFehler: ' + err.message + '\n\nWahrscheinlich müssen in den Firebase-Sicherheitsregeln die To-dos freigegeben werden.');
+    });
+  } else { todos.push(item); saveLocalState(); renderTodos(); }
+}
+function toggleTodoItem(id) {
+  const item = todos.find(function (i) { return i.id === id; });
+  if (!item) return;
+  item.done = !item.done; item.updatedAt = new Date().toISOString();
+  if (isSynced()) { todoCol(family.inviteCode).doc(item.id).set(item).catch(function (err) { alert('Sync-Fehler: ' + err.message); }); }
+  else { saveLocalState(); renderTodos(); }
+}
+function deleteTodoItem(id) {
+  if (isSynced()) { todoCol(family.inviteCode).doc(id).delete().catch(function (err) { alert('Sync-Fehler: ' + err.message); }); }
+  else { todos = todos.filter(function (i) { return i.id !== id; }); saveLocalState(); renderTodos(); }
+}
+function clearDoneTodos() {
+  const doneItems = todos.filter(function (i) { return i.done; });
+  if (doneItems.length === 0) return;
+  if (isSynced()) { doneItems.forEach(function (i) { todoCol(family.inviteCode).doc(i.id).delete().catch(function () { }); }); }
+  else { todos = todos.filter(function (i) { return !i.done; }); saveLocalState(); renderTodos(); }
+}
+function renderTodos() {
+  const container = document.getElementById('todoList');
+  if (!container) return;
+  if (todos.length === 0) {
+    container.innerHTML = '<div class="es" style="text-align:center;padding:40px 20px"><div class="esi">✅</div><h3>Keine To-dos</h3><p>Tragen Sie oben ein, was zu tun ist</p></div>';
+    return;
+  }
+  const open = todos.filter(function (i) { return !i.done; });
+  const done = todos.filter(function (i) { return i.done; });
+  let html = '';
+  open.forEach(function (i) {
+    const p = personLabel(i.personId);
+    html += '<div class="ec" style="display:flex;align-items:center;gap:12px;padding:12px 16px">' +
+      '<button class="bi" style="font-size:1.2rem;padding:4px 12px" onclick="toggleTodoItem(\'' + i.id + '\')">☐</button>' +
+      '<span style="flex:1;font-size:1.05rem;font-weight:500">' + esc(i.name) + '</span>' +
+      '<span class="ep">' + esc(p.emoji) + ' ' + esc(p.name) + '</span>' +
+      '<button class="bi delete" onclick="deleteTodoItem(\'' + i.id + '\')">🗑️</button></div>';
+  });
+  if (done.length > 0) {
+    html += '<div class="sh" style="margin-top:20px"><span class="st">✓ Erledigt (' + done.length + ')</span><button class="bi" onclick="clearDoneTodos()">Entfernen</button></div>';
+    done.forEach(function (i) {
+      const p = personLabel(i.personId);
+      html += '<div class="ec completed" style="display:flex;align-items:center;gap:12px;padding:12px 16px">' +
+        '<button class="bi complete" style="font-size:1.2rem;padding:4px 12px" onclick="toggleTodoItem(\'' + i.id + '\')">☑</button>' +
+        '<span style="flex:1;font-size:1.05rem;text-decoration:line-through;color:#666">' + esc(i.name) + '</span>' +
+        '<span class="ep">' + esc(p.emoji) + ' ' + esc(p.name) + '</span>' +
+        '<button class="bi delete" onclick="deleteTodoItem(\'' + i.id + '\')">🗑️</button></div>';
+    });
+  }
+  container.innerHTML = html;
+}
+
 // ================= TABS & RENDERING =================
 function switchTab(tabName) {
   document.querySelectorAll('.ntb').forEach(function (tab) { tab.classList.remove('active'); });
@@ -566,10 +840,12 @@ function switchTab(tabName) {
     case 'week': renderWeek(); break;
     case 'schedule': renderSchedule(); break;
     case 'family': updateFamilyUI(); break;
+    case 'shopping': renderShopping(); break;
+    case 'todos': renderTodos(); break;
   }
 }
 
-function renderAllTabs() { renderToday(); renderWeek(); renderSchedule(); }
+function renderAllTabs() { renderToday(); renderWeek(); renderSchedule(); checkReminders(); }
 
 function updateDaySelector() {
   const container = document.getElementById('daySelector');
@@ -580,11 +856,11 @@ function updateDaySelector() {
     const date = new Date(today);
     date.setDate(date.getDate() + i);
     days.push({
-      date: date.toISOString().split('T')[0],
+      date: toLocalDateStr(date),
       dayName: getDayName(date.getDay()),
       dayNumber: date.getDate(),
       isToday: i === 0,
-      isSelected: date.toISOString().split('T')[0] === selectedDate
+      isSelected: toLocalDateStr(date) === selectedDate
     });
   }
   container.innerHTML = '';
@@ -651,6 +927,7 @@ function eventCardHTML(event) {
     '<div class="eh"><span class="et">' + formatTime(event.startTime) + ' - ' + endTimeOf(event) + ' (' + formatDuration(event.durationMinutes || 45) + ')</span><div class="eb">' +
     (event.recurrence ? '<span class="b recurring">🔄 ' + getRecurrenceLabel(event.recurrence) + '</span>' : '') +
     (event.isTask ? '<span class="b task">✅ Aufgabe</span>' : '') +
+    (event.fixity === 'fixed' ? '<span class="b fixed">🔒 Fest</span>' : '') +
     '</div></div>' +
     '<div class="etl">' + esc(event.title) + '</div>' +
     '<div style="margin-top:8px"><span class="ep">' + esc(p.emoji) + ' ' + esc(p.name) + '</span></div>' +
@@ -663,7 +940,7 @@ function eventCardHTML(event) {
 }
 
 function renderToday() {
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateStr(new Date());
   const activeDate = selectedDate || today;
   const todayEvents = events.filter(function (e) { return e.date === activeDate; });
   document.getElementById('todayTitle').textContent = formatDate(activeDate);
@@ -686,7 +963,7 @@ function renderWeek() {
   for (let i = 0; i < 7; i++) {
     const date = new Date(today);
     date.setDate(date.getDate() + i);
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toLocalDateStr(date);
     events.filter(function (e) { return e.date === dateStr; }).forEach(function (evt) { weekEvents.push(evt); });
   }
   weekEvents.sort(function (a, b) { return a.date.localeCompare(b.date) || (a.startTime || '').localeCompare(b.startTime || ''); });
@@ -750,6 +1027,78 @@ function updatePersonSelect() {
     option.value = member.id;
     option.textContent = member.emoji + ' ' + member.name;
     select.appendChild(option);
+  });
+  const todoSelect = document.getElementById('todoPerson');
+  if (todoSelect) {
+    todoSelect.innerHTML = '';
+    const famOpt = document.createElement('option');
+    famOpt.value = 'family';
+    famOpt.textContent = '👨‍👩‍👧‍👦 Alle';
+    todoSelect.appendChild(famOpt);
+    members.forEach(function (member) {
+      const o = document.createElement('option');
+      o.value = member.id;
+      o.textContent = member.emoji + ' ' + member.name;
+      todoSelect.appendChild(o);
+    });
+  }
+}
+
+// ================= ERINNERUNGEN =================
+function tomorrowDateStr() { const t = new Date(); t.setDate(t.getDate() + 1); return toLocalDateStr(t); }
+function tomorrowEvents() {
+  const dStr = tomorrowDateStr();
+  return events.filter(function (e) { return e.date === dStr && !e.isCompleted; });
+}
+function checkReminders() {
+  const banner = document.getElementById('reminderBanner');
+  if (!banner) return;
+  const tmr = tomorrowEvents();
+  const dStr = tomorrowDateStr();
+  if (tmr.length === 0 || localStorage.getItem('fp_reminderDismissed') === dStr) { banner.style.display = 'none'; return; }
+  const liste = tmr.map(function (e) { return (e.startTime ? formatTime(e.startTime) + ' ' : '') + e.title; }).join(', ');
+  banner.style.display = 'flex';
+  document.getElementById('reminderText').textContent = '🔔 Erinnerung: Morgen, ' + formatDate(dStr) + ' – ' + (tmr.length === 1 ? '1 Termin' : tmr.length + ' Termine') + ': ' + liste;
+  if ('Notification' in window && Notification.permission === 'granted' && localStorage.getItem('fp_reminderLast') !== dStr) {
+    try {
+      new Notification('🔔 Erinnerung für morgen', { body: liste, icon: 'icon-192.png' });
+      localStorage.setItem('fp_reminderLast', dStr);
+    } catch (e) { }
+  }
+}
+function dismissReminder() {
+  localStorage.setItem('fp_reminderDismissed', tomorrowDateStr());
+  document.getElementById('reminderBanner').style.display = 'none';
+}
+function enableReminders() {
+  if (!('Notification' in window)) { alert('Dieses Gerät unterstützt keine Benachrichtigungen.'); return; }
+  Notification.requestPermission().then(function (p) {
+    if (p === 'granted') { alert('✅ Erinnerungen aktiviert!\n\n– Beim Öffnen der App: Banner + Benachrichtigung\n– Zusätzlich abends echte Push-Nachricht aufs Handy, wenn morgen Termine anstehen.'); subscribePush(); checkReminders(); }
+    else { alert('⚠️ Benachrichtigungen nicht erlaubt. Die Erinnerung erscheint dann nur als Banner in der App selbst.'); }
+  });
+}
+
+function urlB64ToUint8Array(b64) { const padding = '='.repeat((4 - b64.length % 4) % 4); const base64 = (b64 + padding).replace(/-/g, '+').replace(/_/g, '/'); const raw = atob(base64); const arr = new Uint8Array(raw.length); for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i); return arr; }
+function b64Of(key) { return key ? btoa(String.fromCharCode.apply(null, new Uint8Array(key))) : ''; }
+function pushFeedback(ok, msg) {
+  if (localStorage.getItem('fp_pushMsg')) return;
+  localStorage.setItem('fp_pushMsg', '1');
+  alert(ok ? '✅ Dieses Handy ist jetzt für die Termin-Push-Nachricht registriert!\n\nDu bekommst abends eine Benachrichtigung, wenn für den nächsten Tag Termine anstehen.' : '⚠️ Push-Registrierung fehlgeschlagen:\n\n' + (msg || 'Unbekannter Fehler'));
+}
+function subscribePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (!isSynced()) return;
+  navigator.serviceWorker.ready.then(function (reg) {
+    famDoc(family.inviteCode).collection('pushConfig').doc('vapid').get().then(function (d) { return (d.exists && d.data() && d.data().publicKey) ? d.data().publicKey : null; }).then(function (key) {
+      if (!key) { console.warn('VAPID-Schluessel noch nicht vorhanden - Push spaeter erneut versuchen.'); return null; }
+      return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(key.trim()) });
+    }).then(function (sub) {
+      if (!sub) return;
+      let subId = localStorage.getItem('fp_pushSubId');
+      if (!subId) { subId = randId('push'); localStorage.setItem('fp_pushSubId', subId); }
+      const payload = { endpoint: sub.endpoint, p256dh: b64Of(sub.getKey('p256dh')), auth: b64Of(sub.getKey('auth')), updatedAt: new Date().toISOString() };
+      famDoc(family.inviteCode).collection('pushSubs').doc(subId).set(payload).then(function () { console.log('Push-Abo registriert'); pushFeedback(true); }).catch(function (e) { console.warn('Push-Abo speichern fehlgeschlagen:', e); pushFeedback(false, e && e.message ? e.message : String(e)); });
+    }).catch(function (e) { console.warn('Push-Abonnement fehlgeschlagen:', e); });
   });
 }
 
