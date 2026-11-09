@@ -6,9 +6,17 @@ Persönlicher Familienplaner für den Alltag mit Kindern:
 - Hält Puffer im Tagesablauf frei
 - Schlägt bei Änderungen sinnvolle neue Planungen vor
 
+## Web-App (PWA)
+
+`docs/` enthält den Familien-Tagesplaner als installierbare Web-App: geteilter Kalender und Aufgaben für die Familie mit Live-Sync über Firebase. Hosting über GitHub Pages aus `docs/`, Anleitung in `docs/README.md`.
+
+- URL: https://adrgrie-lgtm.github.io/Tagesplaner/
+- Firebase-Sync (Projekt `familienplaner-6ac08`), Konfiguration in `docs/index.html`
+- Auf dem Smartphone: URL im Browser öffnen, „Zum Startbildschirm hinzufügen"
+
 ## Technologie
 
-Android-App (Kotlin, Gradle) · Firebase (Firestore, Rules)
+Android-App (Kotlin, Gradle) · Web-PWA (Vanilla JS) · Firebase (Firestore, Rules)
 
 ## Setup
 
